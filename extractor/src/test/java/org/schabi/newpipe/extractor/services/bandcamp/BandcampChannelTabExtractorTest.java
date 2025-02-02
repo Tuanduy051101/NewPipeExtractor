@@ -27,7 +27,7 @@ class BandcampChannelTabExtractorTest {
         private static BandcampChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = (BandcampChannelTabExtractor) Bandcamp
                     .getChannelTabExtractorFromId("2464198920", ChannelTabs.TRACKS);
@@ -48,7 +48,7 @@ class BandcampChannelTabExtractorTest {
         private static BandcampChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = (BandcampChannelTabExtractor) Bandcamp
                     .getChannelTabExtractorFromId("2450875064", ChannelTabs.ALBUMS);

@@ -23,12 +23,12 @@ public class FeedInfo extends ListInfo<StreamInfoItem> {
         super(serviceId, id, url, originalUrl, name, contentFilter, sortFilter);
     }
 
-    public static FeedInfo getInfo(final String url) throws IOException, ExtractionException {
+    public static FeedInfo getInfo(final String url) throws IOException, ExtractionException, InterruptedException {
         return getInfo(NewPipe.getServiceByUrl(url), url);
     }
 
     public static FeedInfo getInfo(final StreamingService service, final String url)
-            throws IOException, ExtractionException {
+            throws IOException, ExtractionException, InterruptedException {
         final FeedExtractor extractor = service.getFeedExtractor(url);
 
         if (extractor == null) {
@@ -41,7 +41,7 @@ public class FeedInfo extends ListInfo<StreamInfoItem> {
     }
 
     public static FeedInfo getInfo(final FeedExtractor extractor)
-            throws IOException, ExtractionException {
+            throws IOException, ExtractionException, InterruptedException {
         extractor.fetchPage();
 
         final int serviceId = extractor.getServiceId();

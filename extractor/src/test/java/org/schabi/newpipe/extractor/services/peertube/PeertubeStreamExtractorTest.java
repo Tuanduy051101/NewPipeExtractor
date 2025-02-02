@@ -251,7 +251,7 @@ public abstract class PeertubeStreamExtractorTest extends DefaultStreamExtractor
     }
 
     @Test
-    public void testGetSupportInformation() throws ExtractionException, IOException {
+    public void testGetSupportInformation() throws ExtractionException, IOException, InterruptedException {
         StreamExtractor supportInfoExtractor = PeerTube.getStreamExtractor("https://framatube.org/videos/watch/ee408ec8-07cd-4e35-b884-fb681a4b9d37");
         supportInfoExtractor.fetchPage();
         assertEquals("https://utip.io/chatsceptique", supportInfoExtractor.getSupportInfo());

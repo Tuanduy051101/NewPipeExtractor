@@ -30,7 +30,7 @@ public class BandcampStreamExtractorTest extends DefaultStreamExtractorTest {
     private static BandcampStreamExtractor extractor;
 
     @BeforeAll
-    public static void setUp() throws ExtractionException, IOException {
+    public static void setUp() throws ExtractionException, IOException, InterruptedException {
         NewPipe.init(DownloaderTestImpl.getInstance());
 
         extractor = (BandcampStreamExtractor) Bandcamp

@@ -47,7 +47,7 @@ public class PeertubeCommentsExtractorTest {
         }
 
         @Test
-        void testGetCommentsFromCommentsInfo() throws IOException, ExtractionException {
+        void testGetCommentsFromCommentsInfo() throws IOException, ExtractionException, InterruptedException {
             final String comment = "I love this. ❤";
 
             final CommentsInfo commentsInfo =
@@ -116,7 +116,7 @@ public class PeertubeCommentsExtractorTest {
         }
 
         @Test
-        void testGetCommentsFromCommentsInfo() throws IOException, ExtractionException {
+        void testGetCommentsFromCommentsInfo() throws IOException, ExtractionException, InterruptedException {
             final CommentsInfo commentsInfo = CommentsInfo.getInfo("https://framatube.org/videos/watch/217eefeb-883d-45be-b7fc-a788ad8507d3");
             assertTrue(commentsInfo.getErrors().isEmpty());
         }

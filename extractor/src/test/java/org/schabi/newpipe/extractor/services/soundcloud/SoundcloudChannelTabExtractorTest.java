@@ -29,7 +29,7 @@ class SoundcloudChannelTabExtractorTest {
         private static SoundcloudChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = (SoundcloudChannelTabExtractor) SoundCloud
                     .getChannelTabExtractorFromId("10494998", ChannelTabs.TRACKS);
@@ -57,7 +57,7 @@ class SoundcloudChannelTabExtractorTest {
         private static SoundcloudChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = (SoundcloudChannelTabExtractor) SoundCloud
                     .getChannelTabExtractorFromId("323371733", ChannelTabs.PLAYLISTS);
@@ -78,7 +78,7 @@ class SoundcloudChannelTabExtractorTest {
         private static SoundcloudChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = (SoundcloudChannelTabExtractor) SoundCloud
                     .getChannelTabExtractorFromId("4803918", ChannelTabs.ALBUMS);

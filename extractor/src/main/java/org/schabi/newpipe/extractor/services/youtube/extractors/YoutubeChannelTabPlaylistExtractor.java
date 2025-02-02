@@ -67,6 +67,8 @@ public class YoutubeChannelTabPlaylistExtractor extends ChannelTabExtractor {
             // If a channel has no content of the type requested, the corresponding system playlist
             // won't exist, so a ContentNotAvailableException would be thrown
             // Ignore such issues in this case
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 

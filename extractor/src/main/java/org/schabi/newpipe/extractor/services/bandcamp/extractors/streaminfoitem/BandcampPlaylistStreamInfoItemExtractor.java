@@ -78,6 +78,8 @@ public class BandcampPlaylistStreamInfoItemExtractor extends BandcampStreamInfoI
                 return extractor.getThumbnails();
             } catch (final ExtractionException | IOException e) {
                 throw new ParsingException("Could not download cover art location", e);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
         }
 

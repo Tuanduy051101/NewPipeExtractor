@@ -28,7 +28,7 @@ class YoutubeChannelTabExtractorTest {
         private static YoutubeChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             YoutubeTestsUtils.ensureStateless();
             NewPipe.init(DownloaderFactory.getDownloader(RESOURCE_PATH + "videos"));
             extractor = (YoutubeChannelTabExtractor) YouTube.getChannelTabExtractorFromId(
@@ -50,7 +50,7 @@ class YoutubeChannelTabExtractorTest {
         private static YoutubeChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             YoutubeTestsUtils.ensureStateless();
             NewPipe.init(DownloaderFactory.getDownloader(RESOURCE_PATH + "playlists"));
             extractor = (YoutubeChannelTabExtractor) YouTube.getChannelTabExtractorFromId(
@@ -72,7 +72,7 @@ class YoutubeChannelTabExtractorTest {
         private static YoutubeChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             YoutubeTestsUtils.ensureStateless();
             NewPipe.init(DownloaderFactory.getDownloader(RESOURCE_PATH + "livestreams"));
             extractor = (YoutubeChannelTabExtractor) YouTube.getChannelTabExtractorFromId(
@@ -94,7 +94,7 @@ class YoutubeChannelTabExtractorTest {
         private static YoutubeChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             YoutubeTestsUtils.ensureStateless();
             NewPipe.init(DownloaderFactory.getDownloader(RESOURCE_PATH + "shorts"));
             extractor = (YoutubeChannelTabExtractor) YouTube.getChannelTabExtractorFromId(
@@ -116,7 +116,7 @@ class YoutubeChannelTabExtractorTest {
         private static YoutubeChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             YoutubeTestsUtils.ensureStateless();
             NewPipe.init(DownloaderFactory.getDownloader(RESOURCE_PATH + "albums"));
             extractor = (YoutubeChannelTabExtractor) YouTube.getChannelTabExtractorFromId(
@@ -146,7 +146,7 @@ class YoutubeChannelTabExtractorTest {
         private static ChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             YoutubeTestsUtils.ensureStateless();
             NewPipe.init(DownloaderFactory.getDownloader(RESOURCE_PATH + "ageRestrictedTabsVideos"));
             final ChannelExtractor channelExtractor = YouTube.getChannelExtractor(
@@ -172,7 +172,7 @@ class YoutubeChannelTabExtractorTest {
         private static ChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             YoutubeTestsUtils.ensureStateless();
             NewPipe.init(DownloaderFactory.getDownloader(RESOURCE_PATH + "ageRestrictedTabsShorts"));
             final ChannelExtractor channelExtractor = YouTube.getChannelExtractor(

@@ -31,7 +31,7 @@ public class SearchInfo extends ListInfo<InfoItem> {
 
     public static SearchInfo getInfo(final StreamingService service,
                                      final SearchQueryHandler searchQuery)
-            throws ExtractionException, IOException {
+            throws ExtractionException, IOException, InterruptedException {
         final SearchExtractor extractor = service.getSearchExtractor(searchQuery);
         extractor.fetchPage();
         return getInfo(extractor);

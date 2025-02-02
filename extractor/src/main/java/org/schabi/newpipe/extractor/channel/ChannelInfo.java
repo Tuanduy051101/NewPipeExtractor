@@ -42,12 +42,12 @@ public class ChannelInfo extends Info {
         super(serviceId, id, url, originalUrl, name);
     }
 
-    public static ChannelInfo getInfo(final String url) throws IOException, ExtractionException {
+    public static ChannelInfo getInfo(final String url) throws IOException, ExtractionException, InterruptedException {
         return getInfo(NewPipe.getServiceByUrl(url), url);
     }
 
     public static ChannelInfo getInfo(final StreamingService service, final String url)
-            throws IOException, ExtractionException {
+            throws IOException, ExtractionException, InterruptedException {
         final ChannelExtractor extractor = service.getChannelExtractor(url);
         extractor.fetchPage();
         return getInfo(extractor);

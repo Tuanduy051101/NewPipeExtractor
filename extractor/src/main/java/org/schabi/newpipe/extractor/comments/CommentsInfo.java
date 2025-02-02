@@ -20,17 +20,17 @@ public final class CommentsInfo extends ListInfo<CommentsInfoItem> {
         super(serviceId, listUrlIdHandler, name);
     }
 
-    public static CommentsInfo getInfo(final String url) throws IOException, ExtractionException {
+    public static CommentsInfo getInfo(final String url) throws IOException, ExtractionException, InterruptedException {
         return getInfo(NewPipe.getServiceByUrl(url), url);
     }
 
     public static CommentsInfo getInfo(final StreamingService service, final String url)
-            throws ExtractionException, IOException {
+            throws ExtractionException, IOException, InterruptedException {
         return getInfo(service.getCommentsExtractor(url));
     }
 
     public static CommentsInfo getInfo(final CommentsExtractor commentsExtractor)
-            throws IOException, ExtractionException {
+            throws IOException, ExtractionException, InterruptedException {
         // for services which do not have a comments extractor
         if (commentsExtractor == null) {
             return null;

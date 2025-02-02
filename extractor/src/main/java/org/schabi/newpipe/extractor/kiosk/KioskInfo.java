@@ -43,12 +43,12 @@ public final class KioskInfo extends ListInfo<StreamInfoItem> {
         return service.getKioskList().getExtractorByUrl(url, page).getPage(page);
     }
 
-    public static KioskInfo getInfo(final String url) throws IOException, ExtractionException {
+    public static KioskInfo getInfo(final String url) throws IOException, ExtractionException, InterruptedException {
         return getInfo(NewPipe.getServiceByUrl(url), url);
     }
 
     public static KioskInfo getInfo(final StreamingService service, final String url)
-            throws IOException, ExtractionException {
+            throws IOException, ExtractionException, InterruptedException {
         final KioskExtractor extractor = service.getKioskList().getExtractorByUrl(url, null);
         extractor.fetchPage();
         return getInfo(extractor);

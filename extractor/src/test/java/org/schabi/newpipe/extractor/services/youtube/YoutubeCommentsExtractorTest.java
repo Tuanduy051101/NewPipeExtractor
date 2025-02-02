@@ -66,11 +66,11 @@ public class YoutubeCommentsExtractorTest {
         }
 
         @Test
-        void testGetCommentsFromCommentsInfo() throws IOException, ExtractionException {
+        void testGetCommentsFromCommentsInfo() throws IOException, ExtractionException, InterruptedException {
             assertTrue(getCommentsFromCommentsInfoHelper(url));
         }
 
-        private boolean getCommentsFromCommentsInfoHelper(final String url) throws IOException, ExtractionException {
+        private boolean getCommentsFromCommentsInfoHelper(final String url) throws IOException, ExtractionException, InterruptedException {
             final CommentsInfo commentsInfo = CommentsInfo.getInfo(url);
 
             assertEquals("Comments", commentsInfo.getName());

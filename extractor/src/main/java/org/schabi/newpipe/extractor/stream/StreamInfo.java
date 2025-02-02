@@ -63,17 +63,17 @@ public class StreamInfo extends Info {
         this.ageLimit = ageLimit;
     }
 
-    public static StreamInfo getInfo(final String url) throws IOException, ExtractionException {
+    public static StreamInfo getInfo(final String url) throws IOException, ExtractionException, InterruptedException {
         return getInfo(NewPipe.getServiceByUrl(url), url);
     }
 
     public static StreamInfo getInfo(@Nonnull final StreamingService service,
-                                     final String url) throws IOException, ExtractionException {
+                                     final String url) throws IOException, ExtractionException, InterruptedException {
         return getInfo(service.getStreamExtractor(url));
     }
 
     public static StreamInfo getInfo(@Nonnull final StreamExtractor extractor)
-            throws ExtractionException, IOException {
+            throws ExtractionException, IOException, InterruptedException {
         extractor.fetchPage();
         final StreamInfo streamInfo;
         try {

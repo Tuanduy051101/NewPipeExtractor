@@ -31,7 +31,7 @@ public class BandcampRadioStreamExtractorTest extends DefaultStreamExtractorTest
     private static final String URL = "https://bandcamp.com/?show=230";
 
     @BeforeAll
-    public static void setUp() throws IOException, ExtractionException {
+    public static void setUp() throws IOException, ExtractionException, InterruptedException {
         NewPipe.init(DownloaderTestImpl.getInstance());
         extractor = Bandcamp.getStreamExtractor(URL);
         extractor.fetchPage();

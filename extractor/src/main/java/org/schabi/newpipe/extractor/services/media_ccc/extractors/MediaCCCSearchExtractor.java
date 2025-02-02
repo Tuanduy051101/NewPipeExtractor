@@ -101,7 +101,7 @@ public class MediaCCCSearchExtractor extends SearchExtractor {
 
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
-            throws IOException, ExtractionException {
+            throws IOException, ExtractionException, InterruptedException {
         if (getLinkHandler().getContentFilters().contains(EVENTS)
                 || getLinkHandler().getContentFilters().contains(ALL)
                 || getLinkHandler().getContentFilters().isEmpty()) {

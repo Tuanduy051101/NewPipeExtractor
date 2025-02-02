@@ -27,7 +27,7 @@ public class BandcampRadioExtractorTest implements BaseListExtractorTest {
     private static BandcampRadioExtractor extractor;
 
     @BeforeAll
-    public static void setUp() throws ExtractionException, IOException {
+    public static void setUp() throws ExtractionException, IOException, InterruptedException {
         NewPipe.init(DownloaderTestImpl.getInstance());
         extractor = (BandcampRadioExtractor) Bandcamp
                 .getKioskList()

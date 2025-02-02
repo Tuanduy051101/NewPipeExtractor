@@ -53,7 +53,7 @@ class PeertubeChannelTabExtractorTest {
         private static PeertubeChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = (PeertubeChannelTabExtractor)
                     PeerTube.getChannelTabExtractorFromIdAndBaseUrl(
@@ -76,7 +76,7 @@ class PeertubeChannelTabExtractorTest {
         private static PeertubeChannelTabExtractor extractor;
 
         @BeforeAll
-        static void setUp() throws IOException, ExtractionException {
+        static void setUp() throws IOException, ExtractionException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = (PeertubeChannelTabExtractor)
                     PeerTube.getChannelTabExtractorFromIdAndBaseUrl("accounts/framasoft",

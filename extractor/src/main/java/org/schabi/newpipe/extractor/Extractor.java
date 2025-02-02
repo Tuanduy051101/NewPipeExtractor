@@ -53,7 +53,7 @@ public abstract class Extractor {
      * @throws IOException         if the page can not be loaded
      * @throws ExtractionException if the pages content is not understood
      */
-    public void fetchPage() throws IOException, ExtractionException {
+    public void fetchPage() throws IOException, ExtractionException, InterruptedException {
         if (pageFetched) {
             return;
         }

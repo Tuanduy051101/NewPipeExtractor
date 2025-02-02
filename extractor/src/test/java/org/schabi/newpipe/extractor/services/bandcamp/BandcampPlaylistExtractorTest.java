@@ -46,7 +46,7 @@ public class BandcampPlaylistExtractorTest {
      * Test whether playlists contain the correct amount of items
      */
     @Test
-    void testCount() throws ExtractionException, IOException {
+    void testCount() throws ExtractionException, IOException, InterruptedException {
         final PlaylistExtractor extractor = Bandcamp.getPlaylistExtractor("https://macbenson.bandcamp.com/album/coming-of-age");
         extractor.fetchPage();
 
@@ -57,7 +57,7 @@ public class BandcampPlaylistExtractorTest {
      * Tests whether different stream thumbnails (track covers) get loaded correctly
      */
     @Test
-    void testDifferentTrackCovers() throws ExtractionException, IOException {
+    void testDifferentTrackCovers() throws ExtractionException, IOException, InterruptedException {
         final PlaylistExtractor extractor = Bandcamp.getPlaylistExtractor("https://zachbensonarchive.bandcamp.com/album/results-of-boredom");
         extractor.fetchPage();
 
@@ -71,7 +71,7 @@ public class BandcampPlaylistExtractorTest {
      */
     @Test
     @Timeout(10)
-    void testDifferentTrackCoversDuration() throws ExtractionException, IOException {
+    void testDifferentTrackCoversDuration() throws ExtractionException, IOException, InterruptedException {
         final PlaylistExtractor extractor = Bandcamp.getPlaylistExtractor("https://infiniteammo.bandcamp.com/album/night-in-the-woods-vol-1-at-the-end-of-everything");
         extractor.fetchPage();
 
@@ -97,7 +97,7 @@ public class BandcampPlaylistExtractorTest {
      * Test playlist with just one track
      */
     @Test
-    void testSingleStreamPlaylist() throws ExtractionException, IOException {
+    void testSingleStreamPlaylist() throws ExtractionException, IOException, InterruptedException {
         final PlaylistExtractor extractor = Bandcamp.getPlaylistExtractor("https://zachjohnson1.bandcamp.com/album/endless");
         extractor.fetchPage();
 
@@ -109,7 +109,7 @@ public class BandcampPlaylistExtractorTest {
         private static PlaylistExtractor extractor;
 
         @BeforeAll
-        public static void setUp() throws ExtractionException, IOException {
+        public static void setUp() throws ExtractionException, IOException, InterruptedException {
             NewPipe.init(DownloaderTestImpl.getInstance());
             extractor = Bandcamp.getPlaylistExtractor("https://macbenson.bandcamp.com/album/coming-of-age");
             extractor.fetchPage();

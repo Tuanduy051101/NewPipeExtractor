@@ -23,7 +23,7 @@ public class BandcampCommentsExtractorTest {
     private static CommentsExtractor extractor;
 
     @BeforeAll
-    public static void setUp() throws ExtractionException, IOException {
+    public static void setUp() throws ExtractionException, IOException, InterruptedException {
         NewPipe.init(DownloaderTestImpl.getInstance());
         extractor = Bandcamp.getCommentsExtractor("https://floatingpoints.bandcamp.com/album/promises");
         extractor.fetchPage();

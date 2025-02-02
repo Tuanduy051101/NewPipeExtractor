@@ -30,7 +30,7 @@ public class ChannelTabInfo extends ListInfo<InfoItem> {
     @Nonnull
     public static ChannelTabInfo getInfo(@Nonnull final StreamingService service,
                                          @Nonnull final ListLinkHandler linkHandler)
-            throws ExtractionException, IOException {
+            throws ExtractionException, IOException, InterruptedException {
         final ChannelTabExtractor extractor = service.getChannelTabExtractor(linkHandler);
         extractor.fetchPage();
         return getInfo(extractor);

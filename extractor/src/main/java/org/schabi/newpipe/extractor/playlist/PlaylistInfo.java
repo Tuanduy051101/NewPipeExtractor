@@ -61,12 +61,12 @@ public final class PlaylistInfo extends ListInfo<StreamInfoItem> {
         super(serviceId, linkHandler, name);
     }
 
-    public static PlaylistInfo getInfo(final String url) throws IOException, ExtractionException {
+    public static PlaylistInfo getInfo(final String url) throws IOException, ExtractionException, InterruptedException {
         return getInfo(NewPipe.getServiceByUrl(url), url);
     }
 
     public static PlaylistInfo getInfo(final StreamingService service, final String url)
-            throws IOException, ExtractionException {
+            throws IOException, ExtractionException, InterruptedException {
         final PlaylistExtractor extractor = service.getPlaylistExtractor(url);
         extractor.fetchPage();
         return getInfo(extractor);

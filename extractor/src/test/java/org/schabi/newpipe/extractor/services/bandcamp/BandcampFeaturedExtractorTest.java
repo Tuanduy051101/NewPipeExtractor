@@ -29,7 +29,7 @@ public class BandcampFeaturedExtractorTest implements BaseListExtractorTest {
     private static BandcampFeaturedExtractor extractor;
 
     @BeforeAll
-    public static void setUp() throws ExtractionException, IOException {
+    public static void setUp() throws ExtractionException, IOException, InterruptedException {
         NewPipe.init(DownloaderTestImpl.getInstance());
         extractor = (BandcampFeaturedExtractor) Bandcamp
                 .getKioskList().getDefaultKioskExtractor();
