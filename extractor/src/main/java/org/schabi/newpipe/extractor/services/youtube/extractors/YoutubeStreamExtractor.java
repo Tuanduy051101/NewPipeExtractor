@@ -956,7 +956,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                                           @Nonnull final Localization localization,
                                           @Nonnull final String videoId)
             throws IOException, ExtractionException, InterruptedException {
-        int maxRetries = 3;
+        int maxRetries = 15;
         int currentTry = 0;
         while(currentTry < maxRetries) {
             try {
