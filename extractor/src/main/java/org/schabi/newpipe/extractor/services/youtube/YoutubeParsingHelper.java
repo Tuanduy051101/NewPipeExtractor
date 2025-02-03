@@ -1169,33 +1169,33 @@ public final class YoutubeParsingHelper {
 
         Map<String, List<String>> headers = new HashMap<>();
 
-        // Basic headers
-        headers.put("User-Agent", List.of("com.google.android.youtube/17.36.37 (Linux; U; Android " + androidVersion + "; vi; " + deviceModel + ")"));
-        headers.put("Accept", List.of("*/*"));
+        // Basic headers - đảm bảo format chuẩn
+        headers.put("User-Agent", List.of("com.google.android.youtube/" + ANDROID_YOUTUBE_CLIENT_VERSION +
+                " (Linux; U; Android " + androidVersion + "; vi; " + deviceModel + ")"));
+        headers.put("Accept", List.of("application/json"));
         headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
-        headers.put("Accept-Encoding", List.of("gzip, deflate"));
+        headers.put("Accept-Encoding", List.of("gzip"));
+        headers.put("Content-Type", List.of("application/json")); // Thêm content type
 
-        // YouTube specific headers
+        // YouTube specific headers - cập nhật format
         headers.put("X-Goog-Api-Format-Version", List.of("2"));
         headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
-        headers.put("X-YouTube-Client-Name", List.of("3")); // Android client
+        headers.put("X-YouTube-Client-Name", List.of("3"));
         headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
 
         // Android specific headers
         headers.put("X-Android-Package", List.of("com.google.android.youtube"));
         headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
 
-        // Connection headers
-        headers.put("Connection", List.of("Keep-Alive"));
-        headers.put("Host", List.of("www.youtube.com"));
+        // Connection headers - bỏ bớt headers không cần thiết
+        headers.put("Connection", List.of("keep-alive"));
 
-        // Security headers
-        headers.put("X-Requested-With", List.of("com.google.android.youtube"));
-        headers.put("DNT", List.of("1"));
-
-        // Cache control
-        headers.put("Cache-Control", List.of("no-cache"));
-        headers.put("Pragma", List.of("no-cache"));
+        // Bỏ các headers có thể gây conflict
+        // headers.put("Host", List.of("www.youtube.com"));
+        // headers.put("X-Requested-With", List.of("com.google.android.youtube"));
+        // headers.put("DNT", List.of("1"));
+        // headers.put("Cache-Control", List.of("no-cache"));
+        // headers.put("Pragma", List.of("no-cache"));
 
         return headers;
     }
