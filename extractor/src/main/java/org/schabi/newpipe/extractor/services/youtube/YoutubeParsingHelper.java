@@ -1151,28 +1151,53 @@ public final class YoutubeParsingHelper {
 //                endPartOfUrlRequest);
 //    }
 
-    private static Map<String, List<String>> getOptimizedHeaders(@Nonnull final Localization localization) {
+    private static Map<String, List<String>> getOptimizedHeaders() {
+        // Rotate qua nhiều cấu hình device khác nhau để tránh detection
+        final String[][] devices = {
+                {"9", "SM-A305F"},   // Samsung A30
+                {"10", "SM-A505F"},  // Samsung A50
+                {"11", "SM-A526B"},  // Samsung A52 5G
+                {"12", "SM-A536E"},  // Samsung A53
+                {"13", "2201117TY"}, // Xiaomi Redmi Note 11
+                {"13", "CPH2249"},   // OPPO Reno6
+        };
 
-        // Tối ưu headers cho người dùng Việt Nam
+        // Random chọn 1 device config
+        int index = new Random().nextInt(devices.length);
+        final String androidVersion = devices[index][0];
+        final String deviceModel = devices[index][1];
 
-        return Map.of(
+        Map<String, List<String>> headers = new HashMap<>();
 
-                "User-Agent", List.of(getIosUserAgent(localization)),
+        // Basic headers
+        headers.put("User-Agent", List.of("com.google.android.youtube/17.36.37 (Linux; U; Android " + androidVersion + "; vi; " + deviceModel + ")"));
+        headers.put("Accept", List.of("*/*"));
+        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
+        headers.put("Accept-Encoding", List.of("gzip, deflate"));
 
-                "Accept", List.of("*/*"),
+        // YouTube specific headers
+        headers.put("X-Goog-Api-Format-Version", List.of("2"));
+        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
+        headers.put("X-YouTube-Client-Name", List.of("3")); // Android client
+        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
 
-                "Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"), // Ưu tiên tiếng Việt
+        // Android specific headers
+        headers.put("X-Android-Package", List.of("com.google.android.youtube"));
+        headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
 
-                "X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))), // Set country VN
+        // Connection headers
+        headers.put("Connection", List.of("Keep-Alive"));
+        headers.put("Host", List.of("www.youtube.com"));
 
-                "Origin", List.of("https://www.youtube.com"),
+        // Security headers
+        headers.put("X-Requested-With", List.of("com.google.android.youtube"));
+        headers.put("DNT", List.of("1"));
 
-                "X-Youtube-Client-Name", List.of("2"), // iOS client
+        // Cache control
+        headers.put("Cache-Control", List.of("no-cache"));
+        headers.put("Pragma", List.of("no-cache"));
 
-                "X-Youtube-Client-Version", List.of(IOS_YOUTUBE_CLIENT_VERSION)
-
-        );
-
+        return headers;
     }
 
 
@@ -1191,7 +1216,7 @@ public final class YoutubeParsingHelper {
 
 
 
-        final Map<String, List<String>> headers = getOptimizedHeaders(localization);
+        final Map<String, List<String>> headers = getOptimizedHeaders();
 
 
 
