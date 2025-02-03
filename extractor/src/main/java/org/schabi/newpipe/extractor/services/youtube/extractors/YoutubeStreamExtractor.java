@@ -863,71 +863,40 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             throws IOException, ExtractionException, InterruptedException {
 
         final String videoId = getId();
+
+        // Check cache trước
+        CacheEntry cached = VIDEO_CACHE.get(videoId);
+        if (cached != null && !cached.isExpired()) {
+            playerResponse = cached.iosResponse;
+            nextResponse = cached.nextResponse;
+            parseVideoInfo();
+            return;
+        }
+
         final Localization localization = getExtractorLocalization();
         final ContentCountry contentCountry = getExtractorContentCountry();
 
-        // Tạo các CompletableFuture để thực hiện các request song song
-        CompletableFuture<JsonObject> webPlayerFuture = CompletableFuture.supplyAsync(() -> {
+        // Load iOS response và next response song song
+        CompletableFuture<JsonObject> iosFuture = CompletableFuture.supplyAsync(() -> {
             try {
-                return YoutubeParsingHelper.getWebPlayerResponse(localization, contentCountry, videoId);
+                iosCpn = generateContentPlaybackNonce();
+                final byte[] mobileBody = JsonWriter.string(
+                                prepareIosMobileJsonBuilder(localization, contentCountry)
+                                        .value(VIDEO_ID, videoId)
+                                        .value(CPN, iosCpn)
+                                        .value(CONTENT_CHECK_OK, true)
+                                        .value(RACY_CHECK_OK, true)
+                                        .done())
+                        .getBytes(StandardCharsets.UTF_8);
+
+                return getJsonIosPostResponse(PLAYER, mobileBody, localization,
+                        "&t=" + generateTParameter() + "&id=" + videoId);
             } catch (Exception e) {
                 throw new CompletionException(e);
             }
         });
 
-        // Đợi webPlayerResponse để kiểm tra age restriction
-        JsonObject webPlayerResponse = webPlayerFuture.join();
-        if (isPlayerResponseNotValid(webPlayerResponse, videoId)) {
-            checkPlayabilityStatus(webPlayerResponse, webPlayerResponse.getObject("playabilityStatus"));
-            throw new ExtractionException("Initial WEB player response is not valid");
-        }
-
-        playerResponse = webPlayerResponse;
-        final JsonObject playabilityStatus = webPlayerResponse.getObject("playabilityStatus");
-        final boolean isAgeRestricted = "login_required".equalsIgnoreCase(
-                playabilityStatus.getString("status"))
-                && playabilityStatus.getString("reason", "")
-                .contains("age");
-
-        setStreamType();
-
-        // Tạo các Future cho các request còn lại
-        CompletableFuture<Void> tvHtml5Future = null;
-        CompletableFuture<Void> iosFuture = null;
-        CompletableFuture<Void> androidFuture = null;
-        CompletableFuture<JsonObject> nextResponseFuture = null;
-
-        if (isAgeRestricted) {
-            tvHtml5Future = CompletableFuture.runAsync(() -> {
-                try {
-                    fetchTvHtml5EmbedJsonPlayer(contentCountry, localization, videoId);
-                } catch (Exception e) {
-                    throw new CompletionException(e);
-                }
-            });
-        } else {
-            checkPlayabilityStatus(webPlayerResponse, playabilityStatus);
-
-            // Fetch iOS và Android song song
-            iosFuture = CompletableFuture.runAsync(() -> {
-                try {
-                    fetchIosMobileJsonPlayer(contentCountry, localization, videoId);
-                } catch (Exception e) {
-                    throw new CompletionException(e);
-                }
-            });
-
-            androidFuture = CompletableFuture.runAsync(() -> {
-                try {
-                    fetchAndroidMobileJsonPlayer(contentCountry, localization, videoId);
-                } catch (Exception ignored) {
-                    // Ignore Android exceptions
-                }
-            });
-        }
-
-        // Fetch nextResponse song song
-        nextResponseFuture = CompletableFuture.supplyAsync(() -> {
+        CompletableFuture<JsonObject> nextResponseFuture = CompletableFuture.supplyAsync(() -> {
             try {
                 final byte[] body = JsonWriter.string(
                                 prepareDesktopJsonBuilder(localization, contentCountry)
@@ -942,22 +911,88 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             }
         });
 
-        // Đợi tất cả các request hoàn thành
-        if (isAgeRestricted) {
-            CompletableFuture.allOf(tvHtml5Future, nextResponseFuture).join();
-            if (tvHtml5SimplyEmbedStreamingData == null) {
-                throw new AgeRestrictedContentException(
-                        "This age-restricted video cannot be watched.");
-            }
-            setStreamType();
-        } else {
-            CompletableFuture.allOf(iosFuture, androidFuture, nextResponseFuture).join();
+        // Đợi và xử lý iOS response trước
+        playerResponse = iosFuture.join();
+        if (isPlayerResponseNotValid(playerResponse, videoId)) {
+            checkPlayabilityStatus(playerResponse, playerResponse.getObject("playabilityStatus"));
+            throw new ExtractionException("iOS player response is not valid");
         }
 
-        // Lưu kết quả
-        playerMicroFormatRenderer = webPlayerResponse.getObject("microformat")
-                .getObject("playerMicroformatRenderer");
+        // Kiểm tra age restriction
+        final JsonObject playabilityStatus = playerResponse.getObject("playabilityStatus");
+        final boolean isAgeRestricted = "login_required".equalsIgnoreCase(
+                playabilityStatus.getString("status"))
+                && playabilityStatus.getString("reason", "")
+                .contains("age");
+
+        if (isAgeRestricted) {
+            throw new AgeRestrictedContentException("This video is age-restricted");
+        }
+
+        // Đợi next response
         nextResponse = nextResponseFuture.join();
+
+        // Cache response
+        VIDEO_CACHE.put(videoId, new CacheEntry(playerResponse, nextResponse));
+
+        // Parse all data
+        parseVideoInfo();
+    }
+
+    // Thêm cache
+    private static final Map<String, CacheEntry> VIDEO_CACHE = new ConcurrentHashMap<>();
+    private static final int CACHE_DURATION_MS = 5 * 60 * 1000; // 5 phút
+
+    private static class CacheEntry {
+        final JsonObject iosResponse;
+        final JsonObject nextResponse;
+        final long timestamp;
+
+        CacheEntry(JsonObject iosResponse, JsonObject nextResponse) {
+            this.iosResponse = iosResponse;
+            this.nextResponse = nextResponse;
+            this.timestamp = System.currentTimeMillis();
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > CACHE_DURATION_MS;
+        }
+    }
+
+    private void parseVideoInfo() {
+        CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> {
+                    // Parse streaming data
+                    iosStreamingData = playerResponse.getObject(STREAMING_DATA);
+                    playerCaptionsTracklistRenderer = playerResponse.getObject("captions")
+                            .getObject("playerCaptionsTracklistRenderer");
+                    setStreamType();
+                }),
+                CompletableFuture.runAsync(() -> {
+                    // Parse metadata
+                    playerMicroFormatRenderer = playerResponse.getObject("microformat")
+                            .getObject("playerMicroformatRenderer");
+                }),
+                CompletableFuture.runAsync(() -> {
+                    // Parse related videos
+                    videoPrimaryInfoRenderer = getVideoInfoRenderer("videoPrimaryInfoRenderer");
+                    videoSecondaryInfoRenderer = getVideoInfoRenderer("videoSecondaryInfoRenderer");
+                })
+        ).join();
+
+        // Preload related videos sau khi parse xong
+        preloadRelatedVideos();
+    }
+
+    private void preloadRelatedVideos() {
+        // Load trước related videos khi có thời gian
+        CompletableFuture.runAsync(() -> {
+            try {
+                getRelatedItems();
+            } catch (Exception ignored) {
+                // Bỏ qua lỗi vì đây chỉ là preload
+            }
+        });
     }
 
     private void checkPlayabilityStatus(final JsonObject youtubePlayerResponse,

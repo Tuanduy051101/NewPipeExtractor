@@ -1142,13 +1142,81 @@ public final class YoutubeParsingHelper {
                 getAndroidUserAgent(localization), endPartOfUrlRequest);
     }
 
+//    public static JsonObject getJsonIosPostResponse(
+//            final String endpoint,
+//            final byte[] body,
+//            @Nonnull final Localization localization,
+//            @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
+//        return getMobilePostResponse(endpoint, body, localization, getIosUserAgent(localization),
+//                endPartOfUrlRequest);
+//    }
+
+    private static Map<String, List<String>> getOptimizedHeaders(@Nonnull final Localization localization) {
+
+        // Tối ưu headers cho người dùng Việt Nam
+
+        return Map.of(
+
+                "User-Agent", List.of(getIosUserAgent(localization)),
+
+                "Accept", List.of("*/*"),
+
+                "Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"), // Ưu tiên tiếng Việt
+
+                "X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))), // Set country VN
+
+                "Origin", List.of("https://www.youtube.com"),
+
+                "X-Youtube-Client-Name", List.of("2"), // iOS client
+
+                "X-Youtube-Client-Version", List.of(IOS_YOUTUBE_CLIENT_VERSION)
+
+        );
+
+    }
+
+
+
+// Thay thế hàm getJsonIosPostResponse hiện tại bằng phiên bản mới
+
     public static JsonObject getJsonIosPostResponse(
+
             final String endpoint,
+
             final byte[] body,
+
             @Nonnull final Localization localization,
+
             @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
-        return getMobilePostResponse(endpoint, body, localization, getIosUserAgent(localization),
-                endPartOfUrlRequest);
+
+
+
+        final Map<String, List<String>> headers = getOptimizedHeaders(localization);
+
+
+
+        final String baseEndpointUrl = YOUTUBEI_V1_GAPIS_URL + endpoint + "?"
+
+                + DISABLE_PRETTY_PRINT_PARAMETER;
+
+
+
+        return JsonUtils.toJsonObject(getValidJsonResponseBody(
+
+                getDownloader().postWithContentTypeJson(
+
+                        isNullOrEmpty(endPartOfUrlRequest)
+
+                                ? baseEndpointUrl
+
+                                : baseEndpointUrl + endPartOfUrlRequest,
+
+                        headers,
+
+                        body,
+
+                        localization)));
+
     }
 
     private static JsonObject getMobilePostResponse(
