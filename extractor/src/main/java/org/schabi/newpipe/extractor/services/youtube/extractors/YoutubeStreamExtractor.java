@@ -96,7 +96,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
@@ -771,38 +777,113 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     private static final String SIGNATURE_CIPHER = "signatureCipher";
     private static final String CIPHER = "cipher";
 
+//    @Override
+//    public void onFetchPage(@Nonnull final Downloader downloader)
+//            throws IOException, ExtractionException, InterruptedException {
+//
+//        final String videoId = getId();
+//        final Localization localization = getExtractorLocalization();
+//        final ContentCountry contentCountry = getExtractorContentCountry();
+//
+//        final JsonObject webPlayerResponse = YoutubeParsingHelper.getWebPlayerResponse(
+//                localization, contentCountry, videoId);
+//
+//        if (isPlayerResponseNotValid(webPlayerResponse, videoId)) {
+//            // Check the playability status, as private and deleted videos and invalid video IDs do
+//            // not return the ID provided in the player response
+//            // When the requested video is playable and a different video ID is returned, it has
+//            // the OK playability status, meaning the ExtractionException after this check will be
+//            // thrown
+//            checkPlayabilityStatus(
+//                    webPlayerResponse, webPlayerResponse.getObject("playabilityStatus"));
+//            throw new ExtractionException("Initial WEB player response is not valid");
+//        }
+//
+//        // Save the webPlayerResponse into playerResponse in the case the video cannot be played,
+//        // so some metadata can be retrieved
+//        playerResponse = webPlayerResponse;
+//
+//        // Use the player response from the player endpoint of the desktop internal API because
+//        // there can be restrictions on videos in the embedded player.
+//        // E.g. if a video is age-restricted, the embedded player's playabilityStatus says that
+//        // the video cannot be played outside of YouTube, but does not show the original message.
+//        final JsonObject playabilityStatus = webPlayerResponse.getObject("playabilityStatus");
+//
+//        final boolean isAgeRestricted = "login_required".equalsIgnoreCase(
+//                playabilityStatus.getString("status"))
+//                && playabilityStatus.getString("reason", "")
+//                .contains("age");
+//
+//        setStreamType();
+//
+//        if (isAgeRestricted) {
+//            fetchTvHtml5EmbedJsonPlayer(contentCountry, localization, videoId);
+//
+//            // If no streams can be fetched in the TVHTML5 simply embed client, the video should be
+//            // age-restricted, therefore throw an AgeRestrictedContentException explicitly.
+//            if (tvHtml5SimplyEmbedStreamingData == null) {
+//                throw new AgeRestrictedContentException(
+//                        "This age-restricted video cannot be watched.");
+//            }
+//
+//            // Refresh the stream type because the stream type may be not properly known for
+//            // age-restricted videos
+//            setStreamType();
+//        } else {
+//            checkPlayabilityStatus(webPlayerResponse, playabilityStatus);
+//
+//            // Fetching successfully the iOS player is mandatory to get streams
+//            fetchIosMobileJsonPlayer(contentCountry, localization, videoId);
+//
+//            try {
+//                fetchAndroidMobileJsonPlayer(contentCountry, localization, videoId);
+//            } catch (final Exception ignored) {
+//                // Ignore exceptions related to ANDROID client fetch or parsing, as it is not
+//                // compulsory to play contents
+//            }
+//        }
+//
+//        // The microformat JSON object of the content is only returned on the WEB client,
+//        // so we need to store it instead of getting it directly from the playerResponse
+//        playerMicroFormatRenderer = webPlayerResponse.getObject("microformat")
+//                .getObject("playerMicroformatRenderer");
+//
+//        final byte[] body = JsonWriter.string(
+//                prepareDesktopJsonBuilder(localization, contentCountry)
+//                        .value(VIDEO_ID, videoId)
+//                        .value(CONTENT_CHECK_OK, true)
+//                        .value(RACY_CHECK_OK, true)
+//                        .done())
+//                .getBytes(StandardCharsets.UTF_8);
+//        nextResponse = getJsonPostResponse(NEXT, body, localization);
+//    }
+
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException, InterruptedException {
-        final String videoId = getId();
 
+        final String videoId = getId();
         final Localization localization = getExtractorLocalization();
         final ContentCountry contentCountry = getExtractorContentCountry();
 
-        final JsonObject webPlayerResponse = YoutubeParsingHelper.getWebPlayerResponse(
-                localization, contentCountry, videoId);
+        // Tạo các CompletableFuture để thực hiện các request song song
+        CompletableFuture<JsonObject> webPlayerFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return YoutubeParsingHelper.getWebPlayerResponse(localization, contentCountry, videoId);
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+        });
 
+        // Đợi webPlayerResponse để kiểm tra age restriction
+        JsonObject webPlayerResponse = webPlayerFuture.join();
         if (isPlayerResponseNotValid(webPlayerResponse, videoId)) {
-            // Check the playability status, as private and deleted videos and invalid video IDs do
-            // not return the ID provided in the player response
-            // When the requested video is playable and a different video ID is returned, it has
-            // the OK playability status, meaning the ExtractionException after this check will be
-            // thrown
-            checkPlayabilityStatus(
-                    webPlayerResponse, webPlayerResponse.getObject("playabilityStatus"));
+            checkPlayabilityStatus(webPlayerResponse, webPlayerResponse.getObject("playabilityStatus"));
             throw new ExtractionException("Initial WEB player response is not valid");
         }
 
-        // Save the webPlayerResponse into playerResponse in the case the video cannot be played,
-        // so some metadata can be retrieved
         playerResponse = webPlayerResponse;
-
-        // Use the player response from the player endpoint of the desktop internal API because
-        // there can be restrictions on videos in the embedded player.
-        // E.g. if a video is age-restricted, the embedded player's playabilityStatus says that
-        // the video cannot be played outside of YouTube, but does not show the original message.
         final JsonObject playabilityStatus = webPlayerResponse.getObject("playabilityStatus");
-
         final boolean isAgeRestricted = "login_required".equalsIgnoreCase(
                 playabilityStatus.getString("status"))
                 && playabilityStatus.getString("reason", "")
@@ -810,46 +891,73 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
         setStreamType();
 
-        if (isAgeRestricted) {
-            fetchTvHtml5EmbedJsonPlayer(contentCountry, localization, videoId);
+        // Tạo các Future cho các request còn lại
+        CompletableFuture<Void> tvHtml5Future = null;
+        CompletableFuture<Void> iosFuture = null;
+        CompletableFuture<Void> androidFuture = null;
+        CompletableFuture<JsonObject> nextResponseFuture = null;
 
-            // If no streams can be fetched in the TVHTML5 simply embed client, the video should be
-            // age-restricted, therefore throw an AgeRestrictedContentException explicitly.
+        if (isAgeRestricted) {
+            tvHtml5Future = CompletableFuture.runAsync(() -> {
+                try {
+                    fetchTvHtml5EmbedJsonPlayer(contentCountry, localization, videoId);
+                } catch (Exception e) {
+                    throw new CompletionException(e);
+                }
+            });
+        } else {
+            checkPlayabilityStatus(webPlayerResponse, playabilityStatus);
+
+            // Fetch iOS và Android song song
+            iosFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    fetchIosMobileJsonPlayer(contentCountry, localization, videoId);
+                } catch (Exception e) {
+                    throw new CompletionException(e);
+                }
+            });
+
+            androidFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    fetchAndroidMobileJsonPlayer(contentCountry, localization, videoId);
+                } catch (Exception ignored) {
+                    // Ignore Android exceptions
+                }
+            });
+        }
+
+        // Fetch nextResponse song song
+        nextResponseFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                final byte[] body = JsonWriter.string(
+                                prepareDesktopJsonBuilder(localization, contentCountry)
+                                        .value(VIDEO_ID, videoId)
+                                        .value(CONTENT_CHECK_OK, true)
+                                        .value(RACY_CHECK_OK, true)
+                                        .done())
+                        .getBytes(StandardCharsets.UTF_8);
+                return getJsonPostResponse(NEXT, body, localization);
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+        });
+
+        // Đợi tất cả các request hoàn thành
+        if (isAgeRestricted) {
+            CompletableFuture.allOf(tvHtml5Future, nextResponseFuture).join();
             if (tvHtml5SimplyEmbedStreamingData == null) {
                 throw new AgeRestrictedContentException(
                         "This age-restricted video cannot be watched.");
             }
-
-            // Refresh the stream type because the stream type may be not properly known for
-            // age-restricted videos
             setStreamType();
         } else {
-            checkPlayabilityStatus(webPlayerResponse, playabilityStatus);
-
-            // Fetching successfully the iOS player is mandatory to get streams
-            fetchIosMobileJsonPlayer(contentCountry, localization, videoId);
-
-            try {
-                fetchAndroidMobileJsonPlayer(contentCountry, localization, videoId);
-            } catch (final Exception ignored) {
-                // Ignore exceptions related to ANDROID client fetch or parsing, as it is not
-                // compulsory to play contents
-            }
+            CompletableFuture.allOf(iosFuture, androidFuture, nextResponseFuture).join();
         }
 
-        // The microformat JSON object of the content is only returned on the WEB client,
-        // so we need to store it instead of getting it directly from the playerResponse
+        // Lưu kết quả
         playerMicroFormatRenderer = webPlayerResponse.getObject("microformat")
                 .getObject("playerMicroformatRenderer");
-
-        final byte[] body = JsonWriter.string(
-                prepareDesktopJsonBuilder(localization, contentCountry)
-                        .value(VIDEO_ID, videoId)
-                        .value(CONTENT_CHECK_OK, true)
-                        .value(RACY_CHECK_OK, true)
-                        .done())
-                .getBytes(StandardCharsets.UTF_8);
-        nextResponse = getJsonPostResponse(NEXT, body, localization);
+        nextResponse = nextResponseFuture.join();
     }
 
     private void checkPlayabilityStatus(final JsonObject youtubePlayerResponse,
@@ -991,7 +1099,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
                 currentTry++;
                 if (currentTry < maxRetries) {
-                    Thread.sleep(1000);
+                    Thread.sleep(100);
                 }
 
             }catch (Exception e) {
@@ -999,11 +1107,13 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                 if (currentTry == maxRetries) {
                     throw new ExtractionException("Failed to get iOS player response after " + maxRetries + "tries", e);
                 }
-                Thread.sleep(1000);
+                Thread.sleep(100);
             }
         }
         throw new ExtractionException("Could not get valid iOS player response");
     }
+
+
 
     /**
      * Download the {@code TVHTML5_SIMPLY_EMBEDDED_PLAYER} JSON player as an embed client to bypass
@@ -1284,6 +1394,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         }
 
         return streamingData.getArray(streamingDataKey).stream()
+                .parallel()
                 .filter(JsonObject.class::isInstance)
                 .map(JsonObject.class::cast)
                 .map(formatData -> {
