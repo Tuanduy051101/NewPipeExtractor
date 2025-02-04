@@ -1199,8 +1199,8 @@ public final class YoutubeParsingHelper {
         headers.put("Content-Type", List.of("application/json"));
         headers.put("User-Agent", List.of(userAgent));
         headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
-//        headers.put("Accept-Encoding", List.of("gzip, deflate, br"));
-//        headers.put("Connection", List.of("keep-alive"));
+        headers.put("Accept-Encoding", List.of("gzip, deflate, br"));
+        headers.put("Connection", List.of("keep-alive"));
 
         // Headers định danh thiết bị
 //        headers.put("X-Goog-Device-Auth", List.of("{\"id\":\"" + deviceId + "\",\"type\":\"android\"}"));
