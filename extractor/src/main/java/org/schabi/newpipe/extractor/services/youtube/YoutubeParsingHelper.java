@@ -1216,17 +1216,17 @@ public final class YoutubeParsingHelper {
 
         // Headers xác thực
         headers.put("X-Goog-Api-Format-Version", List.of("2"));
-//        headers.put("X-YouTube-Client-Name", List.of("3"));
-//        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
-//        headers.put("X-Android-Package", List.of("com.google.android.youtube"));
-//        headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
+        headers.put("X-YouTube-Client-Name", List.of("3"));
+        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
+        headers.put("X-Android-Package", List.of("com.google.android.youtube"));
+        headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
 
         // Thêm cookie để tránh captcha
-//        headers.put("Cookie", List.of(
-//                "CONSENT=YES+; " +
-//                        "VISITOR_INFO1_LIVE=" + RandomStringFromAlphabetGenerator.generate("0123456789", 11, numberGenerator) + "; " +
-//                        "GPS=1; YSC=" + sessionId
-//        ));
+        headers.put("Cookie", List.of(
+                "CONSENT=YES+; " +
+                        "VISITOR_INFO1_LIVE=" + RandomStringFromAlphabetGenerator.generate("0123456789", 11, numberGenerator) + "; " +
+                        "GPS=1; YSC=" + sessionId
+        ));
 
         final String baseEndpointUrl = "https://www.youtube.com/youtubei/v1/" + endpoint + "?"
                 + DISABLE_PRETTY_PRINT_PARAMETER;
