@@ -60,7 +60,6 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -89,10 +88,10 @@ public final class YoutubeParsingHelper {
      * The base URL of requests of non-web clients to the InnerTube internal API.
      */
 //
-//    public static final String YOUTUBEI_V1_GAPIS_URL =
-//            "https://youtubei.googleapis.com/youtubei/v1/";
     public static final String YOUTUBEI_V1_GAPIS_URL =
-            "https://www.youtube.com/youtubei/v1/";
+            "https://youtubei.googleapis.com/youtubei/v1/";
+//    public static final String YOUTUBEI_V1_GAPIS_URL =
+//            "https://www.youtube.com/youtubei/v1/";
     /**
      * The base URL of YouTube Music.
      */
@@ -1182,92 +1181,6 @@ public final class YoutubeParsingHelper {
 //                        headers, body, localization)));
 //    }
 
-//    private static JsonObject getMobilePostResponse(
-//            final String endpoint,
-//            final byte[] body,
-//            @Nonnull final Localization localization,
-//            @Nonnull final String userAgent,
-//            @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
-//
-//        // Tạo session ID và device ID giả
-//        final String sessionId = RandomStringFromAlphabetGenerator.generate("0123456789abcdef", 32, numberGenerator);
-//        final String deviceId = RandomStringFromAlphabetGenerator.generate("0123456789ABCDEF", 16, numberGenerator);
-//
-//        Map<String, List<String>> headers = new HashMap<>();
-//
-//        // Headers cơ bản
-//        headers.put("Accept", List.of("application/json"));
-//        headers.put("Content-Type", List.of("application/json"));
-//        headers.put("User-Agent", List.of(userAgent));
-//        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
-////        headers.put("Accept-Encoding", List.of("gzip, deflate, br")); // err-parse
-//        headers.put("Connection", List.of("keep-alive"));
-//
-//        // Headers định danh thiết bị
-//        headers.put("X-Goog-Device-Auth", List.of("{\"id\":\"" + deviceId + "\",\"type\":\"android\"}"));
-//        headers.put("X-YouTube-Session-ID", List.of(sessionId));
-//        headers.put("X-YouTube-Time-Zone", List.of("Asia/Ho_Chi_Minh"));
-//        headers.put("X-YouTube-Utc-Offset", List.of("+0700"));
-//
-//        // Headers routing
-//        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
-//        headers.put("X-Goog-Network-Info", List.of("5g,wifi")); // Giả lập mạng tốt
-//        headers.put("X-Goog-Geo", List.of("VN")); // Force server VN
-//        headers.put("X-Forwarded-For", List.of("113.161.0.1")); // IP VN
-//
-//        // Headers xác thực
-//        headers.put("X-Goog-Api-Format-Version", List.of("2"));
-//        headers.put("X-YouTube-Client-Name", List.of("3"));
-//        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
-//        headers.put("X-Android-Package", List.of("com.google.android.youtube"));
-//        headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
-//
-//        // Thêm cookie để tránh captcha
-//        headers.put("Cookie", List.of(
-//                "CONSENT=YES+; " +
-//                        "VISITOR_INFO1_LIVE=" + RandomStringFromAlphabetGenerator.generate("0123456789", 11, numberGenerator) + "; " +
-//                        "GPS=1; YSC=" + sessionId
-//        ));
-//
-//        final String baseEndpointUrl = "https://www.youtube.com/youtubei/v1/" + endpoint + "?"
-//                + DISABLE_PRETTY_PRINT_PARAMETER;
-//
-//        // Thêm delay ngẫu nhiên để tránh request quá nhanh
-//        try {
-//            Thread.sleep(new Random().nextInt(500) + 100);
-//        } catch (Exception ignored) {
-//
-//        }
-//
-//        return JsonUtils.toJsonObject(getValidJsonResponseBody(
-//                getDownloader().postWithContentTypeJson(isNullOrEmpty(endPartOfUrlRequest)
-//                                ? baseEndpointUrl
-//                                : baseEndpointUrl + endPartOfUrlRequest,
-//                        headers, body, localization)));
-//    }
-
-    private static final List<DeviceConfig> DEVICE_POOL = new ArrayList<>();
-    private static int currentDeviceIndex = 0;
-    private static final String[][] DEVICE_CONFIGS = {
-            {"SM-A536E", "13", "TP1A.220624.014"}, // Samsung A53 5G
-            {"SM-A526B", "12", "SP1A.210812.016"}, // Samsung A52 5G
-            {"SM-G998B", "13", "TP1A.220624.014"}, // Samsung S21 Ultra
-            {"Pixel 6", "13", "TQ2A.230505.002"},  // Google Pixel 6
-            {"M2102J20SG", "12", "SKQ1.211006.001"} // Xiaomi Poco X3 Pro
-    };
-
-    static {
-        // Khởi tạo pool với 5 device configs
-        for (int i = 0; i < 5; i++) {
-            DEVICE_POOL.add(new DeviceConfig(
-                    RandomStringFromAlphabetGenerator.generate("0123456789ABCDEF", 16, numberGenerator),
-                    RandomStringFromAlphabetGenerator.generate("0123456789abcdef", 32, numberGenerator),
-                    RandomStringFromAlphabetGenerator.generate("0123456789", 11, numberGenerator),
-                    DEVICE_CONFIGS[i]
-            ));
-        }
-    }
-
     private static JsonObject getMobilePostResponse(
             final String endpoint,
             final byte[] body,
@@ -1275,61 +1188,55 @@ public final class YoutubeParsingHelper {
             @Nonnull final String userAgent,
             @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
 
-        // Lấy device config hiện tại
-        DeviceConfig device = DEVICE_POOL.get(currentDeviceIndex);
-        currentDeviceIndex = (currentDeviceIndex + 1) % DEVICE_POOL.size();
+        // Tạo session ID và device ID giả
+        final String sessionId = RandomStringFromAlphabetGenerator.generate("0123456789abcdef", 32, numberGenerator);
+        final String deviceId = RandomStringFromAlphabetGenerator.generate("0123456789ABCDEF", 16, numberGenerator);
 
         Map<String, List<String>> headers = new HashMap<>();
 
         // Headers cơ bản
         headers.put("Accept", List.of("application/json"));
         headers.put("Content-Type", List.of("application/json"));
-
-        // Custom User Agent theo device
-        String customUserAgent = String.format(
-                "com.google.android.youtube/%s (Linux; U; Android %s; %s; %s; Build/%s)",
-                "17.36.37",
-                device.deviceInfo[1],
-                "vi",
-                device.deviceInfo[0],
-                device.deviceInfo[2]
-        );
-        headers.put("User-Agent", List.of(customUserAgent));
-        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9"));
+        headers.put("User-Agent", List.of(userAgent));
+        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
+//        headers.put("Accept-Encoding", List.of("gzip, deflate, br")); // err-parse
         headers.put("Connection", List.of("keep-alive"));
 
-        // Headers định danh thiết bị - sử dụng thông tin từ device config
-        headers.put("X-Goog-Device-Auth", List.of("{\"id\":\"" + device.deviceId + "\",\"type\":\"android\"}"));
-        headers.put("X-YouTube-Session-ID", List.of(device.sessionId));
+        // Headers định danh thiết bị
+        headers.put("X-Goog-Device-Auth", List.of("{\"id\":\"" + deviceId + "\",\"type\":\"android\"}"));
+        headers.put("X-YouTube-Session-ID", List.of(sessionId));
         headers.put("X-YouTube-Time-Zone", List.of("Asia/Ho_Chi_Minh"));
         headers.put("X-YouTube-Utc-Offset", List.of("+0700"));
 
         // Headers routing
-        headers.put("X-Goog-Visitor-Id", List.of(device.visitorId));
-        headers.put("X-Goog-Geo", List.of("VN"));
+        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
+        headers.put("X-Goog-Network-Info", List.of("5g,wifi")); // Giả lập mạng tốt
+        headers.put("X-Goog-Geo", List.of("VN")); // Force server VN
+        headers.put("X-Forwarded-For", List.of("113.161.0.1")); // IP VN
 
         // Headers xác thực
         headers.put("X-Goog-Api-Format-Version", List.of("2"));
         headers.put("X-YouTube-Client-Name", List.of("3"));
-        headers.put("X-YouTube-Client-Version", List.of("17.36.37"));
+        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
         headers.put("X-Android-Package", List.of("com.google.android.youtube"));
         headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
 
-        // Cookie nhất quán với device
+        // Thêm cookie để tránh captcha
         headers.put("Cookie", List.of(
                 "CONSENT=YES+; " +
-                        "VISITOR_INFO1_LIVE=" + device.visitorId + "; " +
-                        "GPS=1; YSC=" + device.sessionId + "; " +
-                        "PREF=hl=vi&tz=Asia.Ho_Chi_Minh"
+                        "VISITOR_INFO1_LIVE=" + RandomStringFromAlphabetGenerator.generate("0123456789", 11, numberGenerator) + "; " +
+                        "GPS=1; YSC=" + sessionId
         ));
-
-        // Thêm delay khi switch device
-        try {
-            Thread.sleep(1000 + new Random().nextInt(1000));
-        } catch (Exception ignored) {}
 
         final String baseEndpointUrl = "https://www.youtube.com/youtubei/v1/" + endpoint + "?"
                 + DISABLE_PRETTY_PRINT_PARAMETER;
+
+        // Thêm delay ngẫu nhiên để tránh request quá nhanh
+        try {
+            Thread.sleep(new Random().nextInt(500) + 100);
+        } catch (Exception ignored) {
+
+        }
 
         return JsonUtils.toJsonObject(getValidJsonResponseBody(
                 getDownloader().postWithContentTypeJson(isNullOrEmpty(endPartOfUrlRequest)
@@ -1338,19 +1245,7 @@ public final class YoutubeParsingHelper {
                         headers, body, localization)));
     }
 
-    private static class DeviceConfig {
-        final String deviceId;
-        final String sessionId;
-        final String visitorId;
-        final String[] deviceInfo;
 
-        DeviceConfig(String deviceId, String sessionId, String visitorId, String[] deviceInfo) {
-            this.deviceId = deviceId;
-            this.sessionId = sessionId;
-            this.visitorId = visitorId;
-            this.deviceInfo = deviceInfo;
-        }
-    }
 
     @Nonnull
     public static JsonBuilder<JsonObject> prepareDesktopJsonBuilder(
