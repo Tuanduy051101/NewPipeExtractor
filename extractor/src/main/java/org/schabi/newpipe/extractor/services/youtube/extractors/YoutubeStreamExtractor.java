@@ -98,8 +98,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Timer;
-import java.util.TimerTask;
+//import java.util.Timer;
+//import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -878,21 +878,54 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
         // Load iOS response và next response song song
         CompletableFuture<JsonObject> iosFuture = CompletableFuture.supplyAsync(() -> {
-            try {
-                iosCpn = generateContentPlaybackNonce();
-                final byte[] mobileBody = JsonWriter.string(
-                                prepareIosMobileJsonBuilder(localization, contentCountry)
-                                        .value(VIDEO_ID, videoId)
-                                        .value(CPN, iosCpn)
-                                        .value(CONTENT_CHECK_OK, true)
-                                        .value(RACY_CHECK_OK, true)
-                                        .done())
-                        .getBytes(StandardCharsets.UTF_8);
+//            try {
+//                iosCpn = generateContentPlaybackNonce();
+//                final byte[] mobileBody = JsonWriter.string(
+//                                prepareIosMobileJsonBuilder(localization, contentCountry)
+//                                        .value(VIDEO_ID, videoId)
+//                                        .value(CPN, iosCpn)
+//                                        .value(CONTENT_CHECK_OK, true)
+//                                        .value(RACY_CHECK_OK, true)
+//                                        .done())
+//                        .getBytes(StandardCharsets.UTF_8);
+//
+//                return getJsonIosPostResponse(PLAYER, mobileBody, localization,
+//                        "&t=" + generateTParameter() + "&id=" + videoId);
+//            } catch (Exception e) {
+//                throw new CompletionException(e);
+//            }
+            while (true) {
+                try {
+                    iosCpn = generateContentPlaybackNonce();
+                    final byte[] mobileBody = JsonWriter.string(
+                                    prepareIosMobileJsonBuilder(localization, contentCountry)
+                                            .value(VIDEO_ID, videoId)
+                                            .value(CPN, iosCpn)
+                                            .value(CONTENT_CHECK_OK, true)
+                                            .value(RACY_CHECK_OK, true)
+                                            .done())
+                            .getBytes(StandardCharsets.UTF_8);
 
-                return getJsonIosPostResponse(PLAYER, mobileBody, localization,
-                        "&t=" + generateTParameter() + "&id=" + videoId);
-            } catch (Exception e) {
-                throw new CompletionException(e);
+                    playerResponse = getJsonIosPostResponse(PLAYER, mobileBody, localization,
+                            "&t=" + generateTParameter() + "&id=" + videoId);
+
+                    // Nếu response hợp lệ thì break
+                    if (!isPlayerResponseNotValid(playerResponse, videoId)) {
+                        return playerResponse;
+                    }
+
+                    // Thêm delay trước khi thử lại
+                    Thread.sleep(100);
+
+                } catch (Exception e) {
+                    // Thêm delay trước khi thử lại
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ex) {
+                        throw new RuntimeException(ex);
+                    }
+                    continue;
+                }
             }
         });
 

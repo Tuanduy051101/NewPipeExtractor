@@ -1162,15 +1162,6 @@ public final class YoutubeParsingHelper {
             @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
         final var headers = Map.of("User-Agent", List.of(userAgent),
                 "X-Goog-Api-Format-Version", List.of("2"));
-//        Map<String, List<String>> headers = new HashMap<>();
-//        headers.put("User-Agent", List.of(userAgent));
-//        headers.put("X-Goog-Api-Format-Version", List.of("2"));
-//        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
-//        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
-//        headers.put("X-Goog-Geo-Headers", List.of("VN")); // Thêm header này để ưu tiên server VN
-//        headers.put("X-Goog-Network-Info", List.of("4g")); // Giả lập kết nối 4G để được ưu tiên CDN gần
-
-
         final String baseEndpointUrl = YOUTUBEI_V1_GAPIS_URL + endpoint + "?"
                 + DISABLE_PRETTY_PRINT_PARAMETER;
 

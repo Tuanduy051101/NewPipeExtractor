@@ -43,10 +43,13 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
@@ -243,30 +246,95 @@ public class YoutubeStreamInfoItemExtractor implements StreamInfoItemExtractor {
         return YoutubeParsingHelper.isVerified(videoInfo.getArray("ownerBadges"));
     }
 
+//    @Nullable
+//    @Override
+//    public String getTextualUploadDate() throws ParsingException {
+//        if (getStreamType().equals(StreamType.LIVE_STREAM)) {
+//            return null;
+//        }
+//
+//        if (isPremiere()) {
+//            return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(getDateFromPremiere());
+//        }
+//
+//        String publishedTimeText = getTextFromObject(videoInfo.getObject("publishedTimeText"));
+//
+//        if (isNullOrEmpty(publishedTimeText) && videoInfo.has("videoInfo")) {
+//            /*
+//            Returned in playlists, in the form: view count separator upload date
+//            */
+//            publishedTimeText = videoInfo.getObject("videoInfo")
+//                    .getArray("runs")
+//                    .getObject(2)
+//                    .getString("text");
+//        }
+//
+//        return isNullOrEmpty(publishedTimeText) ? null : publishedTimeText;
+//    }
+
     @Nullable
     @Override
     public String getTextualUploadDate() throws ParsingException {
-        if (getStreamType().equals(StreamType.LIVE_STREAM)) {
-            return null;
+        try {
+            if (getStreamType().equals(StreamType.LIVE_STREAM)) {
+                return null;
+            }
+
+            if (isPremiere()) {
+                return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(getDateFromPremiere());
+            }
+
+            // Lấy publishedTimeText từ videoInfo
+            String publishedTimeText = null;
+
+            // Cách 1: Trực tiếp từ publishedTimeText
+            if (videoInfo.has("publishedTimeText")) {
+                publishedTimeText = getTextFromObject(videoInfo.getObject("publishedTimeText"));
+            }
+
+            // Cách 2: Từ videoInfo trong playlist
+            if (isNullOrEmpty(publishedTimeText) && videoInfo.has("videoInfo")) {
+                JsonArray runs = videoInfo.getObject("videoInfo").getArray("runs");
+                if (runs != null && runs.size() >= 3) {
+                    publishedTimeText = runs.getObject(2).getString("text", null);
+                }
+            }
+
+            if (isNullOrEmpty(publishedTimeText)) {
+                return null;
+            }
+
+            // Chuẩn hóa format date
+            try {
+                // Thử parse với các format phổ biến
+                DateTimeFormatter[] formatters = {
+                        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH),
+                        DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH),
+                        DateTimeFormatter.ofPattern("yyyy-MM-dd", Locale.ENGLISH),
+                        DateTimeFormatter.ofPattern("dd/MM/yyyy", Locale.ENGLISH)
+                };
+
+                for (DateTimeFormatter formatter : formatters) {
+                    try {
+                        // Nếu parse được thì trả về text gốc
+                        LocalDate.parse(publishedTimeText, formatter);
+                        return publishedTimeText;
+                    } catch (DateTimeParseException ignored) {
+                        // Thử format tiếp theo
+                    }
+                }
+
+                // Nếu không parse được với format nào thì trả về text gốc
+                return publishedTimeText;
+
+            } catch (Exception e) {
+                // Nếu có lỗi trong quá trình parse, trả về text gốc
+                return publishedTimeText;
+            }
+
+        } catch (Exception e) {
+            throw new ParsingException("Could not get upload date", e);
         }
-
-        if (isPremiere()) {
-            return DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(getDateFromPremiere());
-        }
-
-        String publishedTimeText = getTextFromObject(videoInfo.getObject("publishedTimeText"));
-
-        if (isNullOrEmpty(publishedTimeText) && videoInfo.has("videoInfo")) {
-            /*
-            Returned in playlists, in the form: view count separator upload date
-            */
-            publishedTimeText = videoInfo.getObject("videoInfo")
-                    .getArray("runs")
-                    .getObject(2)
-                    .getString("text");
-        }
-
-        return isNullOrEmpty(publishedTimeText) ? null : publishedTimeText;
     }
 
     @Nullable
