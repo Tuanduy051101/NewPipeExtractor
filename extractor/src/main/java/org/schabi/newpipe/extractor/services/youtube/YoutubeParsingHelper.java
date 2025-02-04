@@ -87,9 +87,11 @@ public final class YoutubeParsingHelper {
     /**
      * The base URL of requests of non-web clients to the InnerTube internal API.
      */
+//
+//    public static final String YOUTUBEI_V1_GAPIS_URL =
+//            "https://youtubei.googleapis.com/youtubei/v1/";
     public static final String YOUTUBEI_V1_GAPIS_URL =
-            "https://youtubei.googleapis.com/youtubei/v1/";
-
+            "https://www.youtube.com/youtubei/v1/";
     /**
      * The base URL of YouTube Music.
      */
@@ -1142,107 +1144,15 @@ public final class YoutubeParsingHelper {
                 getAndroidUserAgent(localization), endPartOfUrlRequest);
     }
 
-//    public static JsonObject getJsonIosPostResponse(
-//            final String endpoint,
-//            final byte[] body,
-//            @Nonnull final Localization localization,
-//            @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
-//        return getMobilePostResponse(endpoint, body, localization, getIosUserAgent(localization),
-//                endPartOfUrlRequest);
-//    }
-
-    private static Map<String, List<String>> getOptimizedHeaders() {
-        // Rotate qua nhiều cấu hình device khác nhau để tránh detection
-        final String[][] devices = {
-                {"9", "SM-A305F"},   // Samsung A30
-                {"10", "SM-A505F"},  // Samsung A50
-                {"11", "SM-A526B"},  // Samsung A52 5G
-                {"12", "SM-A536E"},  // Samsung A53
-                {"13", "2201117TY"}, // Xiaomi Redmi Note 11
-                {"13", "CPH2249"},   // OPPO Reno6
-        };
-
-        // Random chọn 1 device config
-        int index = new Random().nextInt(devices.length);
-        final String androidVersion = devices[index][0];
-        final String deviceModel = devices[index][1];
-
-        Map<String, List<String>> headers = new HashMap<>();
-
-        // Basic headers - đảm bảo format chuẩn
-        headers.put("User-Agent", List.of("com.google.android.youtube/" + ANDROID_YOUTUBE_CLIENT_VERSION +
-                " (Linux; U; Android " + androidVersion + "; vi; " + deviceModel + ")"));
-        headers.put("Accept", List.of("application/json"));
-        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
-        headers.put("Accept-Encoding", List.of("gzip"));
-        headers.put("Content-Type", List.of("application/json")); // Thêm content type
-
-        // YouTube specific headers - cập nhật format
-        headers.put("X-Goog-Api-Format-Version", List.of("2"));
-        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
-        headers.put("X-YouTube-Client-Name", List.of("3"));
-        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
-
-        // Android specific headers
-        headers.put("X-Android-Package", List.of("com.google.android.youtube"));
-        headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
-
-        // Connection headers - bỏ bớt headers không cần thiết
-        headers.put("Connection", List.of("keep-alive"));
-
-        // Bỏ các headers có thể gây conflict
-        // headers.put("Host", List.of("www.youtube.com"));
-        // headers.put("X-Requested-With", List.of("com.google.android.youtube"));
-        // headers.put("DNT", List.of("1"));
-        // headers.put("Cache-Control", List.of("no-cache"));
-        // headers.put("Pragma", List.of("no-cache"));
-
-        return headers;
-    }
-
-
-
-// Thay thế hàm getJsonIosPostResponse hiện tại bằng phiên bản mới
-
     public static JsonObject getJsonIosPostResponse(
-
             final String endpoint,
-
             final byte[] body,
-
             @Nonnull final Localization localization,
-
             @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
-
-
-
-        final Map<String, List<String>> headers = getOptimizedHeaders();
-
-
-
-        final String baseEndpointUrl = YOUTUBEI_V1_GAPIS_URL + endpoint + "?"
-
-                + DISABLE_PRETTY_PRINT_PARAMETER;
-
-
-
-        return JsonUtils.toJsonObject(getValidJsonResponseBody(
-
-                getDownloader().postWithContentTypeJson(
-
-                        isNullOrEmpty(endPartOfUrlRequest)
-
-                                ? baseEndpointUrl
-
-                                : baseEndpointUrl + endPartOfUrlRequest,
-
-                        headers,
-
-                        body,
-
-                        localization)));
-
+        return getMobilePostResponse(endpoint, body, localization, getIosUserAgent(localization),
+                endPartOfUrlRequest);
     }
+
 
     private static JsonObject getMobilePostResponse(
             final String endpoint,
@@ -1250,8 +1160,16 @@ public final class YoutubeParsingHelper {
             @Nonnull final Localization localization,
             @Nonnull final String userAgent,
             @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
-        final var headers = Map.of("User-Agent", List.of(userAgent),
-                "X-Goog-Api-Format-Version", List.of("2"));
+//        final var headers = Map.of("User-Agent", List.of(userAgent),
+//                "X-Goog-Api-Format-Version", List.of("2"));
+        Map<String, List<String>> headers = new HashMap<>();
+        headers.put("User-Agent", List.of(userAgent));
+        headers.put("X-Goog-Api-Format-Version", List.of("2"));
+        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
+        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
+        headers.put("X-Goog-Geo-Headers", List.of("VN")); // Thêm header này để ưu tiên server VN
+        headers.put("X-Goog-Network-Info", List.of("4g")); // Giả lập kết nối 4G để được ưu tiên CDN gần
+
 
         final String baseEndpointUrl = YOUTUBEI_V1_GAPIS_URL + endpoint + "?"
                 + DISABLE_PRETTY_PRINT_PARAMETER;
