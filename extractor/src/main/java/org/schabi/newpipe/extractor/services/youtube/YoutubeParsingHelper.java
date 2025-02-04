@@ -1181,6 +1181,70 @@ public final class YoutubeParsingHelper {
 //                        headers, body, localization)));
 //    }
 
+//    private static JsonObject getMobilePostResponse(
+//            final String endpoint,
+//            final byte[] body,
+//            @Nonnull final Localization localization,
+//            @Nonnull final String userAgent,
+//            @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
+//
+//        // Tạo session ID và device ID giả
+//        final String sessionId = RandomStringFromAlphabetGenerator.generate("0123456789abcdef", 32, numberGenerator);
+//        final String deviceId = RandomStringFromAlphabetGenerator.generate("0123456789ABCDEF", 16, numberGenerator);
+//
+//        Map<String, List<String>> headers = new HashMap<>();
+//
+//        // Headers cơ bản
+//        headers.put("Accept", List.of("application/json"));
+//        headers.put("Content-Type", List.of("application/json"));
+//        headers.put("User-Agent", List.of(userAgent));
+//        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
+////        headers.put("Accept-Encoding", List.of("gzip, deflate, br")); // err-parse
+//        headers.put("Connection", List.of("keep-alive"));
+//
+//        // Headers định danh thiết bị
+//        headers.put("X-Goog-Device-Auth", List.of("{\"id\":\"" + deviceId + "\",\"type\":\"android\"}"));
+//        headers.put("X-YouTube-Session-ID", List.of(sessionId));
+//        headers.put("X-YouTube-Time-Zone", List.of("Asia/Ho_Chi_Minh"));
+//        headers.put("X-YouTube-Utc-Offset", List.of("+0700"));
+//
+//        // Headers routing
+//        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
+//        headers.put("X-Goog-Network-Info", List.of("5g,wifi")); // Giả lập mạng tốt
+//        headers.put("X-Goog-Geo", List.of("VN")); // Force server VN
+//        headers.put("X-Forwarded-For", List.of("113.161.0.1")); // IP VN
+//
+//        // Headers xác thực
+//        headers.put("X-Goog-Api-Format-Version", List.of("2"));
+//        headers.put("X-YouTube-Client-Name", List.of("3"));
+//        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
+//        headers.put("X-Android-Package", List.of("com.google.android.youtube"));
+//        headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
+//
+//        // Thêm cookie để tránh captcha
+//        headers.put("Cookie", List.of(
+//                "CONSENT=YES+; " +
+//                        "VISITOR_INFO1_LIVE=" + RandomStringFromAlphabetGenerator.generate("0123456789", 11, numberGenerator) + "; " +
+//                        "GPS=1; YSC=" + sessionId
+//        ));
+//
+//        final String baseEndpointUrl = "https://www.youtube.com/youtubei/v1/" + endpoint + "?"
+//                + DISABLE_PRETTY_PRINT_PARAMETER;
+//
+//        // Thêm delay ngẫu nhiên để tránh request quá nhanh
+//        try {
+//            Thread.sleep(new Random().nextInt(500) + 100);
+//        } catch (Exception ignored) {
+//
+//        }
+//
+//        return JsonUtils.toJsonObject(getValidJsonResponseBody(
+//                getDownloader().postWithContentTypeJson(isNullOrEmpty(endPartOfUrlRequest)
+//                                ? baseEndpointUrl
+//                                : baseEndpointUrl + endPartOfUrlRequest,
+//                        headers, body, localization)));
+//    }
+
     private static JsonObject getMobilePostResponse(
             final String endpoint,
             final byte[] body,
@@ -1188,61 +1252,54 @@ public final class YoutubeParsingHelper {
             @Nonnull final String userAgent,
             @Nullable final String endPartOfUrlRequest) throws IOException, ExtractionException {
 
-        // Tạo session ID và device ID giả
-        final String sessionId = RandomStringFromAlphabetGenerator.generate("0123456789abcdef", 32, numberGenerator);
-        final String deviceId = RandomStringFromAlphabetGenerator.generate("0123456789ABCDEF", 16, numberGenerator);
-
         Map<String, List<String>> headers = new HashMap<>();
 
-        // Headers cơ bản
-        headers.put("Accept", List.of("application/json"));
+        // Basic headers - giả lập TV client
+        headers.put("User-Agent", List.of("Mozilla/5.0 (Linux; Tizen 2.3) AppleWebKit/538.1 (KHTML, like Gecko)Version/2.3 TV Safari/538.1"));
+        headers.put("Accept", List.of("*/*")); // TV clients thường accept tất cả
+        headers.put("Accept-Language", List.of("vi"));
         headers.put("Content-Type", List.of("application/json"));
-        headers.put("User-Agent", List.of(userAgent));
-        headers.put("Accept-Language", List.of("vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7"));
-//        headers.put("Accept-Encoding", List.of("gzip, deflate, br")); // err-parse
-        headers.put("Connection", List.of("keep-alive"));
+        headers.put("Origin", List.of("https://www.youtube.com"));
+        headers.put("Referer", List.of("https://www.youtube.com"));
 
-        // Headers định danh thiết bị
-        headers.put("X-Goog-Device-Auth", List.of("{\"id\":\"" + deviceId + "\",\"type\":\"android\"}"));
-        headers.put("X-YouTube-Session-ID", List.of(sessionId));
-        headers.put("X-YouTube-Time-Zone", List.of("Asia/Ho_Chi_Minh"));
-        headers.put("X-YouTube-Utc-Offset", List.of("+0700"));
-
-        // Headers routing
-        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
-        headers.put("X-Goog-Network-Info", List.of("5g,wifi")); // Giả lập mạng tốt
-        headers.put("X-Goog-Geo", List.of("VN")); // Force server VN
-        headers.put("X-Forwarded-For", List.of("113.161.0.1")); // IP VN
-
-        // Headers xác thực
+        // YouTube TV specific headers
+        headers.put("X-YouTube-Client-Name", List.of("85")); // 85 là TV client
+        headers.put("X-YouTube-Client-Version", List.of("2.0")); // TV version
         headers.put("X-Goog-Api-Format-Version", List.of("2"));
-        headers.put("X-YouTube-Client-Name", List.of("3"));
-        headers.put("X-YouTube-Client-Version", List.of(ANDROID_YOUTUBE_CLIENT_VERSION));
-        headers.put("X-Android-Package", List.of("com.google.android.youtube"));
-        headers.put("X-Android-Cert", List.of("20:3C:B4:77:21:4F:62:26:CF:D6:C5:E6:E3:FC:16:AA:76:C7:44:E7"));
 
-        // Thêm cookie để tránh captcha
-        headers.put("Cookie", List.of(
-                "CONSENT=YES+; " +
-                        "VISITOR_INFO1_LIVE=" + RandomStringFromAlphabetGenerator.generate("0123456789", 11, numberGenerator) + "; " +
-                        "GPS=1; YSC=" + sessionId
-        ));
-
+        // Thêm API key vào URL
         final String baseEndpointUrl = "https://www.youtube.com/youtubei/v1/" + endpoint + "?"
-                + DISABLE_PRETTY_PRINT_PARAMETER;
+                + "key=AIzaSyDCU8hByM-4DrUqRUYnGn-3llEO78bcxq8" // TV client API key
+                + "&prettyPrint=false";
 
-        // Thêm delay ngẫu nhiên để tránh request quá nhanh
+        // Modify body để thêm thông tin TV client
+        String bodyStr = new String(body, StandardCharsets.UTF_8);
+        JsonObject jsonBody = null;
         try {
-            Thread.sleep(new Random().nextInt(500) + 100);
-        } catch (Exception ignored) {
+            jsonBody = JsonParser.object().from(bodyStr);
+        } catch (JsonParserException ignored) {
 
         }
+        assert jsonBody != null;
+        JsonObject context = jsonBody.getObject("context");
+        JsonObject client = context.getObject("client");
+
+        client.put("clientName", "TVHTML5_SIMPLY_EMBEDDED_PLAYER");
+        client.put("clientVersion", "2.0");
+        client.put("platform", "TV");
+        client.put("clientScreen", "EMBED");
+
+        // Convert back to bytes
+        byte[] modifiedBody = jsonBody.toString().getBytes(StandardCharsets.UTF_8);
 
         return JsonUtils.toJsonObject(getValidJsonResponseBody(
-                getDownloader().postWithContentTypeJson(isNullOrEmpty(endPartOfUrlRequest)
+                getDownloader().postWithContentTypeJson(
+                        isNullOrEmpty(endPartOfUrlRequest)
                                 ? baseEndpointUrl
                                 : baseEndpointUrl + endPartOfUrlRequest,
-                        headers, body, localization)));
+                        headers,
+                        modifiedBody,
+                        localization)));
     }
 
     @Nonnull
