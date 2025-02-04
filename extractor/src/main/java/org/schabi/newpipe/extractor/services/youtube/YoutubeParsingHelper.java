@@ -1209,10 +1209,10 @@ public final class YoutubeParsingHelper {
         headers.put("X-YouTube-Utc-Offset", List.of("+0700"));
 
         // Headers routing
-//        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
-//        headers.put("X-Goog-Network-Info", List.of("5g,wifi")); // Giả lập mạng tốt
-//        headers.put("X-Goog-Geo", List.of("VN")); // Force server VN
-//        headers.put("X-Forwarded-For", List.of("113.161.0.1")); // IP VN
+        headers.put("X-Goog-Visitor-Id", List.of(randomVisitorData(new ContentCountry("VN"))));
+        headers.put("X-Goog-Network-Info", List.of("5g,wifi")); // Giả lập mạng tốt
+        headers.put("X-Goog-Geo", List.of("VN")); // Force server VN
+        headers.put("X-Forwarded-For", List.of("113.161.0.1")); // IP VN
 
         // Headers xác thực
         headers.put("X-Goog-Api-Format-Version", List.of("2"));
