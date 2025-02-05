@@ -166,64 +166,51 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nullable
     @Override
     public String getTextualUploadDate() throws ParsingException {
+        // Thử lấy từ microformat trước
         if (!playerMicroFormatRenderer.getString("uploadDate", "").isEmpty()) {
             return playerMicroFormatRenderer.getString("uploadDate");
         } else if (!playerMicroFormatRenderer.getString("publishDate", "").isEmpty()) {
             return playerMicroFormatRenderer.getString("publishDate");
         }
 
-        final JsonObject liveDetails = playerMicroFormatRenderer.getObject(
-                "liveBroadcastDetails");
+        // Thử lấy từ live details
+        final JsonObject liveDetails = playerMicroFormatRenderer.getObject("liveBroadcastDetails");
         if (!liveDetails.getString("endTimestamp", "").isEmpty()) {
-            // an ended live stream
             return liveDetails.getString("endTimestamp");
         } else if (!liveDetails.getString("startTimestamp", "").isEmpty()) {
-            // a running live stream
             return liveDetails.getString("startTimestamp");
-        } else if (getStreamType() == StreamType.LIVE_STREAM) {
-            // this should never be reached, but a live stream without upload date is valid
-            return null;
         }
 
-        final String videoPrimaryInfoRendererDateText =
-                getTextFromObject(getVideoPrimaryInfoRenderer().getObject("dateText"));
-
-        if (videoPrimaryInfoRendererDateText != null) {
-            if (videoPrimaryInfoRendererDateText.startsWith("Premiered")) {
-                final String time = videoPrimaryInfoRendererDateText.substring(13);
-
-                try { // Premiered 20 hours ago
-                    final TimeAgoParser timeAgoParser = TimeAgoPatternsManager.getTimeAgoParserFor(
-                            new Localization("en"));
-                    final OffsetDateTime parsedTime = timeAgoParser.parse(time).offsetDateTime();
-                    return DateTimeFormatter.ISO_LOCAL_DATE.format(parsedTime);
-                } catch (final Exception ignored) {
-                }
-
-                try { // Premiered Feb 21, 2020
-                    final LocalDate localDate = LocalDate.parse(time,
-                            DateTimeFormatter.ofPattern("MMM dd, yyyy", Locale.ENGLISH));
-                    return DateTimeFormatter.ISO_LOCAL_DATE.format(localDate);
-                } catch (final Exception ignored) {
-                }
-
-                try { // Premiered on 21 Feb 2020
-                    final LocalDate localDate = LocalDate.parse(time,
-                            DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH));
-                    return DateTimeFormatter.ISO_LOCAL_DATE.format(localDate);
-                } catch (final Exception ignored) {
-                }
-            }
-
+        // Thử parse từ text
+        final String dateText = getTextFromObject(getVideoPrimaryInfoRenderer().getObject("dateText"));
+        if (dateText != null) {
             try {
-                // TODO: this parses English formatted dates only, we need a better approach to
-                //  parse the textual date
-                final LocalDate localDate = LocalDate.parse(videoPrimaryInfoRendererDateText,
-                        DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH));
-                return DateTimeFormatter.ISO_LOCAL_DATE.format(localDate);
-            } catch (final Exception e) {
-                throw new ParsingException("Could not get upload date", e);
+                // Thử parse với nhiều format khác nhau
+                final DateTimeFormatter[] formatters = {
+                        DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH),
+                        DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.ENGLISH),
+                        DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH),
+                        DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH),
+                        DateTimeFormatter.ISO_LOCAL_DATE
+                };
+
+                for (DateTimeFormatter formatter : formatters) {
+                    try {
+                        final LocalDate date = LocalDate.parse(dateText, formatter);
+                        return DateTimeFormatter.ISO_LOCAL_DATE.format(date);
+                    } catch (Exception e) {
+                        // Thử format tiếp theo
+                        continue;
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore
             }
+        }
+
+        // Trả về null nếu là live stream
+        if (getStreamType() == StreamType.LIVE_STREAM) {
+            return null;
         }
 
         throw new ParsingException("Could not get upload date");
