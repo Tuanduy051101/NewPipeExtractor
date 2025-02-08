@@ -29,6 +29,9 @@ dependencies {
     implementation 'org.jsoup:jsoup:1.17.2'
     implementation "com.github.spotbugs:spotbugs-annotations:$spotbugsVersion"
 
+    implementation("com.google.guava:guava:32.1.2-jre") // Guava Cache
+    implementation("org.slf4j:slf4j-api:2.0.9")         // SLF4J Logger
+
     // do not upgrade to 1.7.14, since in 1.7.14 Rhino uses the `SourceVersion` class, which is not
     // available on Android (even when using desugaring), and `NoClassDefFoundError` is thrown
     implementation 'org.mozilla:rhino:1.7.15'

@@ -37,6 +37,8 @@ allprojects {
 dependencies {
     api project(':extractor')
     implementation project(':timeago-parser')
+    implementation("com.google.guava:guava:32.1.2-jre") // Guava Cache
+    implementation("org.slf4j:slf4j-api:2.0.9")         // SLF4J Logger
 }
 
 subprojects {

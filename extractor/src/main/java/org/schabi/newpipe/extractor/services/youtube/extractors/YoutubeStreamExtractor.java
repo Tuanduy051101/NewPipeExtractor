@@ -91,16 +91,26 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+//import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+//import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-public class YoutubeStreamExtractor extends StreamExtractor {
+// ttd-edit-v1
+//import com.google.common.cache.Cache;
+//import com.google.common.cache.CacheBuilder;
+import java.util.concurrent.CompletableFuture;
+//import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+public class YoutubeStreamExtractor extends StreamExtractor {
+    private static final Logger LOG = LoggerFactory.getLogger(YoutubeStreamExtractor.class);
     @Nullable
     private static PoTokenProvider poTokenProvider;
     private static boolean fetchIosClient;
@@ -136,6 +146,8 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     private String androidStreamingUrlsPoToken;
     @Nullable
     private String iosStreamingUrlsPoToken;
+
+
 
     public YoutubeStreamExtractor(final StreamingService service, final LinkHandler linkHandler) {
         super(service, linkHandler);
@@ -805,13 +817,30 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     private static final String CAPTIONS = "captions";
     private static final String PLAYABILITY_STATUS = "playabilityStatus";
 
+    // ttd-edit-v1
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
-        final String videoId = getId();
 
-        final Localization localization = getExtractorLocalization();
-        final ContentCountry contentCountry = getExtractorContentCountry();
+        // Sử dụng CompletableFuture để thực hiện các tác vụ song song
+        final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return getId();
+            } catch (final ParsingException e) {
+                // Xử lý ngoại lệ, có thể ghi log hoặc trả về giá trị mặc định
+                LOG.error("e: ", e);
+                return "defaultVideoId"; // Giá trị mặc định
+            }
+        });
+        final CompletableFuture<Localization> localizationFuture =
+                CompletableFuture.supplyAsync(this::getExtractorLocalization);
+        final CompletableFuture<ContentCountry> contentCountryFuture =
+                CompletableFuture.supplyAsync(this::getExtractorContentCountry);
+
+        // Chờ tất cả các tác vụ hoàn thành
+        final String videoId = videoIdFuture.join();
+        final Localization localization = localizationFuture.join();
+        final ContentCountry contentCountry = contentCountryFuture.join();
 
         final PoTokenProvider poTokenproviderInstance = poTokenProvider;
         final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
