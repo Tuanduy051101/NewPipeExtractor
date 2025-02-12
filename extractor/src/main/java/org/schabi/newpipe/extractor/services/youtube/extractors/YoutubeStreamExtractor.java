@@ -1327,39 +1327,122 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         }
     }
 
+//    private void fetchAndroidClient(@Nonnull final Localization localization,
+//                                    @Nonnull final ContentCountry contentCountry,
+//                                    @Nonnull final String videoId,
+//                                    @Nullable final PoTokenResult androidPoTokenResult) {
+//        try {
+//            androidCpn = generateContentPlaybackNonce();
+//
+//            final JsonObject androidPlayerResponse;
+//            if (androidPoTokenResult == null) {
+//                androidPlayerResponse = YoutubeStreamHelper.getAndroidReelPlayerResponse(
+//                        contentCountry, localization, videoId, androidCpn);
+//            } else {
+//                androidPlayerResponse = YoutubeStreamHelper.getAndroidPlayerResponse(
+//                        contentCountry, localization, videoId, androidCpn,
+//                        androidPoTokenResult);
+//            }
+//
+//            if (!isPlayerResponseNotValid(androidPlayerResponse, videoId)) {
+//                androidStreamingData = androidPlayerResponse.getObject(STREAMING_DATA);
+//
+//                if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
+//                    playerCaptionsTracklistRenderer =
+//                            androidPlayerResponse.getObject(CAPTIONS)
+//                                    .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
+//                }
+//
+//                if (androidPoTokenResult != null) {
+//                    androidStreamingUrlsPoToken = androidPoTokenResult.streamingDataPoToken;
+//                }
+//            }
+//        } catch (final Exception ignored) {
+//            // Ignore exceptions related to ANDROID client fetch or parsing, as it is not
+//            // compulsory to play contents
+//        }
+//    }
+//
+//    private void fetchIosClient(@Nonnull final Localization localization,
+//                                @Nonnull final ContentCountry contentCountry,
+//                                @Nonnull final String videoId,
+//                                @Nullable final PoTokenResult iosPoTokenResult) {
+//        try {
+//            iosCpn = generateContentPlaybackNonce();
+//
+//            final JsonObject iosPlayerResponse = YoutubeStreamHelper.getIosPlayerResponse(
+//                    contentCountry, localization, videoId, iosCpn, iosPoTokenResult);
+//
+//            if (!isPlayerResponseNotValid(iosPlayerResponse, videoId)) {
+//                iosStreamingData = iosPlayerResponse.getObject(STREAMING_DATA);
+//
+//                if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
+//                    playerCaptionsTracklistRenderer = iosPlayerResponse.getObject(CAPTIONS)
+//                            .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
+//                }
+//
+//                if (iosPoTokenResult != null) {
+//                    iosStreamingUrlsPoToken = iosPoTokenResult.streamingDataPoToken;
+//                }
+//            }
+//        } catch (final Exception ignored) {
+//            // Ignore exceptions related to IOS client fetch or parsing, as it is not
+//            // compulsory to play contents
+//        }
+//    }
+
     private void fetchAndroidClient(@Nonnull final Localization localization,
                                     @Nonnull final ContentCountry contentCountry,
                                     @Nonnull final String videoId,
                                     @Nullable final PoTokenResult androidPoTokenResult) {
         try {
-            androidCpn = generateContentPlaybackNonce();
+            // Generate CPN song song
+            CompletableFuture<String> cpnFuture = CompletableFuture.supplyAsync(
+                    YoutubeParsingHelper::generateContentPlaybackNonce);
 
-            final JsonObject androidPlayerResponse;
-            if (androidPoTokenResult == null) {
-                androidPlayerResponse = YoutubeStreamHelper.getAndroidReelPlayerResponse(
-                        contentCountry, localization, videoId, androidCpn);
-            } else {
-                androidPlayerResponse = YoutubeStreamHelper.getAndroidPlayerResponse(
-                        contentCountry, localization, videoId, androidCpn,
-                        androidPoTokenResult);
-            }
+            // Fetch player response song song
+            CompletableFuture<JsonObject> playerResponseFuture = cpnFuture.thenApplyAsync(cpn -> {
+                try {
+                    androidCpn = cpn;
+                    if (androidPoTokenResult == null) {
+                        return YoutubeStreamHelper.getAndroidReelPlayerResponse(
+                                contentCountry, localization, videoId, cpn);
+                    } else {
+                        return YoutubeStreamHelper.getAndroidPlayerResponse(
+                                contentCountry, localization, videoId, cpn,
+                                androidPoTokenResult);
+                    }
+                } catch (Exception e) {
+                    throw new CompletionException(e);
+                }
+            });
+
+            // Get response với timeout
+            final JsonObject androidPlayerResponse = playerResponseFuture.get(3, TimeUnit.SECONDS);
 
             if (!isPlayerResponseNotValid(androidPlayerResponse, videoId)) {
-                androidStreamingData = androidPlayerResponse.getObject(STREAMING_DATA);
+                // Extract data song song
+                CompletableFuture.allOf(
+                        CompletableFuture.runAsync(() ->
+                                androidStreamingData = androidPlayerResponse.getObject(STREAMING_DATA)),
 
-                if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
-                    playerCaptionsTracklistRenderer =
-                            androidPlayerResponse.getObject(CAPTIONS)
-                                    .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-                }
+                        CompletableFuture.runAsync(() -> {
+                            if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
+                                playerCaptionsTracklistRenderer =
+                                        androidPlayerResponse.getObject(CAPTIONS)
+                                                .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
+                            }
+                        }),
 
-                if (androidPoTokenResult != null) {
-                    androidStreamingUrlsPoToken = androidPoTokenResult.streamingDataPoToken;
-                }
+                        CompletableFuture.runAsync(() -> {
+                            if (androidPoTokenResult != null) {
+                                androidStreamingUrlsPoToken = androidPoTokenResult.streamingDataPoToken;
+                            }
+                        })
+                ).get(1, TimeUnit.SECONDS);
             }
         } catch (final Exception ignored) {
-            // Ignore exceptions related to ANDROID client fetch or parsing, as it is not
-            // compulsory to play contents
+            // Ignore exceptions related to ANDROID client fetch or parsing
         }
     }
 
@@ -1368,26 +1451,46 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                                 @Nonnull final String videoId,
                                 @Nullable final PoTokenResult iosPoTokenResult) {
         try {
-            iosCpn = generateContentPlaybackNonce();
+            // Generate CPN song song
+            CompletableFuture<String> cpnFuture = CompletableFuture.supplyAsync(
+                    YoutubeParsingHelper::generateContentPlaybackNonce);
 
-            final JsonObject iosPlayerResponse = YoutubeStreamHelper.getIosPlayerResponse(
-                    contentCountry, localization, videoId, iosCpn, iosPoTokenResult);
+            // Fetch player response song song
+            CompletableFuture<JsonObject> playerResponseFuture = cpnFuture.thenApplyAsync(cpn -> {
+                try {
+                    iosCpn = cpn;
+                    return YoutubeStreamHelper.getIosPlayerResponse(
+                            contentCountry, localization, videoId, cpn, iosPoTokenResult);
+                } catch (Exception e) {
+                    throw new CompletionException(e);
+                }
+            });
+
+            // Get response với timeout
+            final JsonObject iosPlayerResponse = playerResponseFuture.get(3, TimeUnit.SECONDS);
 
             if (!isPlayerResponseNotValid(iosPlayerResponse, videoId)) {
-                iosStreamingData = iosPlayerResponse.getObject(STREAMING_DATA);
+                // Extract data song song
+                CompletableFuture.allOf(
+                        CompletableFuture.runAsync(() ->
+                                iosStreamingData = iosPlayerResponse.getObject(STREAMING_DATA)),
 
-                if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
-                    playerCaptionsTracklistRenderer = iosPlayerResponse.getObject(CAPTIONS)
-                            .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-                }
+                        CompletableFuture.runAsync(() -> {
+                            if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
+                                playerCaptionsTracklistRenderer = iosPlayerResponse.getObject(CAPTIONS)
+                                        .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
+                            }
+                        }),
 
-                if (iosPoTokenResult != null) {
-                    iosStreamingUrlsPoToken = iosPoTokenResult.streamingDataPoToken;
-                }
+                        CompletableFuture.runAsync(() -> {
+                            if (iosPoTokenResult != null) {
+                                iosStreamingUrlsPoToken = iosPoTokenResult.streamingDataPoToken;
+                            }
+                        })
+                ).get(1, TimeUnit.SECONDS);
             }
         } catch (final Exception ignored) {
-            // Ignore exceptions related to IOS client fetch or parsing, as it is not
-            // compulsory to play contents
+            // Ignore exceptions related to IOS client fetch or parsing
         }
     }
 
