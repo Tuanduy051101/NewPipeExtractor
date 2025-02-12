@@ -96,6 +96,12 @@ import java.util.List;
 import java.util.Locale;
 //import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
@@ -818,57 +824,185 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     private static final String PLAYABILITY_STATUS = "playabilityStatus";
 
     // ttd-edit-v1
+//    @Override
+//    public void onFetchPage(@Nonnull final Downloader downloader)
+//            throws IOException, ExtractionException {
+//
+//        // Sử dụng CompletableFuture để thực hiện các tác vụ song song
+//        final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
+//            try {
+//                return getId();
+//            } catch (final ParsingException e) {
+//                // Xử lý ngoại lệ, có thể ghi log hoặc trả về giá trị mặc định
+//                LOG.error("e: ", e);
+//                return "defaultVideoId"; // Giá trị mặc định
+//            }
+//        });
+//        final CompletableFuture<Localization> localizationFuture =
+//                CompletableFuture.supplyAsync(this::getExtractorLocalization);
+//        final CompletableFuture<ContentCountry> contentCountryFuture =
+//                CompletableFuture.supplyAsync(this::getExtractorContentCountry);
+//
+//        // Chờ tất cả các tác vụ hoàn thành
+//        final String videoId = videoIdFuture.join();
+//        final Localization localization = localizationFuture.join();
+//        final ContentCountry contentCountry = contentCountryFuture.join();
+//
+//        final PoTokenProvider poTokenproviderInstance = poTokenProvider;
+//        final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
+//
+//        fetchHtml5Client(localization, contentCountry, videoId, poTokenproviderInstance,
+//                noPoTokenProviderSet);
+//
+//        setStreamType();
+//
+//        final PoTokenResult androidPoTokenResult = noPoTokenProviderSet ? null
+//                : poTokenproviderInstance.getAndroidClientPoToken(videoId);
+//
+//        fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
+//
+//        if (fetchIosClient) {
+//            final PoTokenResult iosPoTokenResult = noPoTokenProviderSet ? null
+//                    : poTokenproviderInstance.getIosClientPoToken(videoId);
+//            fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+//        }
+//
+//        final byte[] nextBody = JsonWriter.string(
+//                prepareDesktopJsonBuilder(localization, contentCountry)
+//                        .value(VIDEO_ID, videoId)
+//                        .value(CONTENT_CHECK_OK, true)
+//                        .value(RACY_CHECK_OK, true)
+//                        .done())
+//                .getBytes(StandardCharsets.UTF_8);
+//        nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
+//    }
+
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
 
-        // Sử dụng CompletableFuture để thực hiện các tác vụ song song
-        final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
+        // 1. Tạo ExecutorService để quản lý threads
+        final ExecutorService executor = Executors.newFixedThreadPool(4);
+
+        try {
+            // 2. Fetch thông tin cơ bản song song
+            final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return getId();
+                } catch (final ParsingException e) {
+                    LOG.error("Failed to get video ID", e);
+                    throw new CompletionException(e);
+                }
+            }, executor);
+
+            final CompletableFuture<Localization> localizationFuture =
+                    CompletableFuture.supplyAsync(this::getExtractorLocalization, executor);
+
+            final CompletableFuture<ContentCountry> contentCountryFuture =
+                    CompletableFuture.supplyAsync(this::getExtractorContentCountry, executor);
+
+            // 3. Chờ thông tin cơ bản với timeout
+            final String videoId = videoIdFuture.get(3, TimeUnit.SECONDS);
+            final Localization localization = localizationFuture.get(3, TimeUnit.SECONDS);
+            final ContentCountry contentCountry = contentCountryFuture.get(3, TimeUnit.SECONDS);
+
+            final PoTokenProvider poTokenproviderInstance = poTokenProvider;
+            final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
+
+            // 4. Fetch PoTokens song song (nếu cần)
+            final CompletableFuture<PoTokenResult> androidTokenFuture = !noPoTokenProviderSet
+                    ? CompletableFuture.supplyAsync(
+                    () -> poTokenproviderInstance.getAndroidClientPoToken(videoId), executor)
+                    : CompletableFuture.completedFuture(null);
+
+            final CompletableFuture<PoTokenResult> iosTokenFuture = (!noPoTokenProviderSet && fetchIosClient)
+                    ? CompletableFuture.supplyAsync(
+                    () -> poTokenproviderInstance.getIosClientPoToken(videoId), executor)
+                    : CompletableFuture.completedFuture(null);
+
+            // 5. Fetch các clients song song
+            final CompletableFuture<Void> html5Future = CompletableFuture.runAsync(() -> {
+                try {
+                    fetchHtml5Client(localization, contentCountry, videoId,
+                            poTokenproviderInstance, noPoTokenProviderSet);
+                    setStreamType(); // Set ngay sau khi có HTML5 data
+                } catch (Exception e) {
+                    LOG.error("HTML5 client failed", e);
+                    throw new CompletionException(e);
+                }
+            }, executor);
+
+            final CompletableFuture<Void> androidFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    final PoTokenResult androidPoTokenResult = androidTokenFuture.get(3, TimeUnit.SECONDS);
+                    fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
+                } catch (Exception e) {
+                    LOG.debug("Android client failed", e);
+                }
+            }, executor);
+
+            final CompletableFuture<Void> iosFuture = fetchIosClient
+                    ? CompletableFuture.runAsync(() -> {
+                try {
+                    final PoTokenResult iosPoTokenResult = iosTokenFuture.get(3, TimeUnit.SECONDS);
+                    fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+                } catch (Exception e) {
+                    LOG.debug("iOS client failed", e);
+                }
+            }, executor)
+                    : CompletableFuture.completedFuture(null);
+
+            // 6. Fetch next response song song
+            final CompletableFuture<Void> nextResponseFuture = CompletableFuture.runAsync(() -> {
+                try {
+                    final byte[] nextBody = JsonWriter.string(
+                                    prepareDesktopJsonBuilder(localization, contentCountry)
+                                            .value(VIDEO_ID, videoId)
+                                            .value(CONTENT_CHECK_OK, true)
+                                            .value(RACY_CHECK_OK, true)
+                                            .done())
+                            .getBytes(StandardCharsets.UTF_8);
+                    nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
+                } catch (Exception e) {
+                    LOG.error("Next response fetch failed", e);
+                    throw new CompletionException(e);
+                }
+            }, executor);
+
+            // 7. Chờ các tasks quan trọng hoàn thành với timeout
             try {
-                return getId();
-            } catch (final ParsingException e) {
-                // Xử lý ngoại lệ, có thể ghi log hoặc trả về giá trị mặc định
-                LOG.error("e: ", e);
-                return "defaultVideoId"; // Giá trị mặc định
+                CompletableFuture.allOf(
+                        html5Future,      // Bắt buộc
+                        nextResponseFuture // Bắt buộc
+                ).get(10, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                throw new ExtractionException("Critical tasks failed", e);
             }
-        });
-        final CompletableFuture<Localization> localizationFuture =
-                CompletableFuture.supplyAsync(this::getExtractorLocalization);
-        final CompletableFuture<ContentCountry> contentCountryFuture =
-                CompletableFuture.supplyAsync(this::getExtractorContentCountry);
 
-        // Chờ tất cả các tác vụ hoàn thành
-        final String videoId = videoIdFuture.join();
-        final Localization localization = localizationFuture.join();
-        final ContentCountry contentCountry = contentCountryFuture.join();
+            // 8. Chờ các tasks không quan trọng (với timeout ngắn hơn)
+            try {
+                CompletableFuture.allOf(
+                        androidFuture,
+                        iosFuture
+                ).get(5, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                LOG.debug("Some non-critical tasks failed or timed out", e);
+            }
 
-        final PoTokenProvider poTokenproviderInstance = poTokenProvider;
-        final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
-
-        fetchHtml5Client(localization, contentCountry, videoId, poTokenproviderInstance,
-                noPoTokenProviderSet);
-
-        setStreamType();
-
-        final PoTokenResult androidPoTokenResult = noPoTokenProviderSet ? null
-                : poTokenproviderInstance.getAndroidClientPoToken(videoId);
-
-        fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
-
-        if (fetchIosClient) {
-            final PoTokenResult iosPoTokenResult = noPoTokenProviderSet ? null
-                    : poTokenproviderInstance.getIosClientPoToken(videoId);
-            fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+        } catch (ExecutionException | InterruptedException | TimeoutException e) {
+            throw new RuntimeException(e);
+        } finally {
+            // 9. Cleanup resources
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
-
-        final byte[] nextBody = JsonWriter.string(
-                prepareDesktopJsonBuilder(localization, contentCountry)
-                        .value(VIDEO_ID, videoId)
-                        .value(CONTENT_CHECK_OK, true)
-                        .value(RACY_CHECK_OK, true)
-                        .done())
-                .getBytes(StandardCharsets.UTF_8);
-        nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
     }
 
     private static void checkPlayabilityStatus(@Nonnull final JsonObject playabilityStatus)
