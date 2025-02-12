@@ -1064,85 +1064,220 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         throw new ContentNotAvailableException("Got error: \"" + reason + "\"");
     }
 
+//    private void fetchHtml5Client(@Nonnull final Localization localization,
+//                                  @Nonnull final ContentCountry contentCountry,
+//                                  @Nonnull final String videoId,
+//                                  @Nullable final PoTokenProvider poTokenProviderInstance,
+//                                  final boolean noPoTokenProviderSet)
+//            throws IOException, ExtractionException {
+//        html5Cpn = generateContentPlaybackNonce();
+//
+//        // Suppress NPE warning as nullability is already checked before and passed with
+//        // noPoTokenProviderSet
+//        //noinspection DataFlowIssue
+//        final PoTokenResult webPoTokenResult = noPoTokenProviderSet ? null
+//                : poTokenProviderInstance.getWebClientPoToken(videoId);
+//        final JsonObject webPlayerResponse;
+//        if (noPoTokenProviderSet || webPoTokenResult == null) {
+//            webPlayerResponse = YoutubeStreamHelper.getWebMetadataPlayerResponse(
+//                    localization, contentCountry, videoId);
+//
+//            throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
+//
+//            // Save the webPlayerResponse into playerResponse in the case the video cannot be
+//            // played, so some metadata can be retrieved
+//            playerResponse = webPlayerResponse;
+//
+//            // The microformat JSON object of the content is only returned on the WEB client,
+//            // so we need to store it instead of getting it directly from the playerResponse
+//            playerMicroFormatRenderer = playerResponse.getObject("microformat")
+//                    .getObject("playerMicroformatRenderer");
+//
+//            final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
+//
+//            if (isVideoAgeRestricted(playabilityStatus)) {
+//                fetchHtml5EmbedClient(localization, contentCountry, videoId,
+//                        noPoTokenProviderSet ? null
+//                                : poTokenProviderInstance.getWebEmbedClientPoToken(videoId));
+//            } else {
+//                checkPlayabilityStatus(playabilityStatus);
+//
+//                final JsonObject tvHtml5PlayerResponse =
+//                        YoutubeStreamHelper.getTvHtml5PlayerResponse(
+//                                localization, contentCountry, videoId, html5Cpn,
+//                                YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
+//
+//                if (isPlayerResponseNotValid(tvHtml5PlayerResponse, videoId)) {
+//                    throw new ExtractionException("TVHTML5 player response is not valid");
+//                }
+//
+//                html5StreamingData = tvHtml5PlayerResponse.getObject(STREAMING_DATA);
+//                playerCaptionsTracklistRenderer = tvHtml5PlayerResponse.getObject(CAPTIONS)
+//                        .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
+//            }
+//        } else {
+//            webPlayerResponse = YoutubeStreamHelper.getWebFullPlayerResponse(
+//                    localization, contentCountry, videoId, html5Cpn, webPoTokenResult,
+//                    YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
+//
+//            throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
+//
+//            // Save the webPlayerResponse into playerResponse in the case the video cannot be
+//            // played, so some metadata can be retrieved
+//            playerResponse = webPlayerResponse;
+//
+//            // The microformat JSON object of the content is only returned on the WEB client,
+//            // so we need to store it instead of getting it directly from the playerResponse
+//            playerMicroFormatRenderer = playerResponse.getObject("microformat")
+//                    .getObject("playerMicroformatRenderer");
+//
+//            final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
+//
+//            if (isVideoAgeRestricted(playabilityStatus)) {
+//                fetchHtml5EmbedClient(localization, contentCountry, videoId,
+//                        poTokenProviderInstance.getWebEmbedClientPoToken(videoId));
+//            } else {
+//                checkPlayabilityStatus(playabilityStatus);
+//                html5StreamingData = webPlayerResponse.getObject(STREAMING_DATA);
+//                playerCaptionsTracklistRenderer = webPlayerResponse.getObject(CAPTIONS)
+//                        .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
+//                html5StreamingUrlsPoToken = webPoTokenResult.streamingDataPoToken;
+//            }
+//        }
+//    }
+
     private void fetchHtml5Client(@Nonnull final Localization localization,
                                   @Nonnull final ContentCountry contentCountry,
                                   @Nonnull final String videoId,
                                   @Nullable final PoTokenProvider poTokenProviderInstance,
                                   final boolean noPoTokenProviderSet)
             throws IOException, ExtractionException {
-        html5Cpn = generateContentPlaybackNonce();
+        try {
+            // 1. Parallel fetch các thông tin cần thiết
+            CompletableFuture<String> cpnFuture = CompletableFuture.supplyAsync(
+                    () -> generateContentPlaybackNonce()
+            );
 
-        // Suppress NPE warning as nullability is already checked before and passed with
-        // noPoTokenProviderSet
-        //noinspection DataFlowIssue
-        final PoTokenResult webPoTokenResult = noPoTokenProviderSet ? null
-                : poTokenProviderInstance.getWebClientPoToken(videoId);
-        final JsonObject webPlayerResponse;
-        if (noPoTokenProviderSet || webPoTokenResult == null) {
-            webPlayerResponse = YoutubeStreamHelper.getWebMetadataPlayerResponse(
-                    localization, contentCountry, videoId);
-
-            throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
-
-            // Save the webPlayerResponse into playerResponse in the case the video cannot be
-            // played, so some metadata can be retrieved
-            playerResponse = webPlayerResponse;
-
-            // The microformat JSON object of the content is only returned on the WEB client,
-            // so we need to store it instead of getting it directly from the playerResponse
-            playerMicroFormatRenderer = playerResponse.getObject("microformat")
-                    .getObject("playerMicroformatRenderer");
-
-            final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
-
-            if (isVideoAgeRestricted(playabilityStatus)) {
-                fetchHtml5EmbedClient(localization, contentCountry, videoId,
-                        noPoTokenProviderSet ? null
-                                : poTokenProviderInstance.getWebEmbedClientPoToken(videoId));
-            } else {
-                checkPlayabilityStatus(playabilityStatus);
-
-                final JsonObject tvHtml5PlayerResponse =
-                        YoutubeStreamHelper.getTvHtml5PlayerResponse(
-                                localization, contentCountry, videoId, html5Cpn,
-                                YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
-
-                if (isPlayerResponseNotValid(tvHtml5PlayerResponse, videoId)) {
-                    throw new ExtractionException("TVHTML5 player response is not valid");
+            CompletableFuture<String> signatureTimestampFuture = CompletableFuture.supplyAsync(() -> {
+                try {
+                    return YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId);
+                } catch (Exception e) {
+                    LOG.error("Failed to get signature timestamp", e);
+                    throw new CompletionException(e);
                 }
+            }).thenApply(String::valueOf);
 
-                html5StreamingData = tvHtml5PlayerResponse.getObject(STREAMING_DATA);
-                playerCaptionsTracklistRenderer = tvHtml5PlayerResponse.getObject(CAPTIONS)
-                        .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-            }
-        } else {
-            webPlayerResponse = YoutubeStreamHelper.getWebFullPlayerResponse(
-                    localization, contentCountry, videoId, html5Cpn, webPoTokenResult,
-                    YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
+            CompletableFuture<PoTokenResult> webTokenFuture = CompletableFuture.supplyAsync(() -> {
+                if (noPoTokenProviderSet) return null;
+                try {
+                    return poTokenProviderInstance.getWebClientPoToken(videoId);
+                } catch (Exception e) {
+                    LOG.error("Failed to get web token", e);
+                    return null;
+                }
+            });
 
-            throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
+            // 2. Chờ kết quả với timeout
+            html5Cpn = cpnFuture.get(2, TimeUnit.SECONDS);
+            final String signatureTimestamp = signatureTimestampFuture.get(2, TimeUnit.SECONDS);
+            final PoTokenResult webPoTokenResult = webTokenFuture.get(2, TimeUnit.SECONDS);
 
-            // Save the webPlayerResponse into playerResponse in the case the video cannot be
-            // played, so some metadata can be retrieved
-            playerResponse = webPlayerResponse;
+            // 3. Fetch web player response
+            final JsonObject webPlayerResponse;
+            if (noPoTokenProviderSet || webPoTokenResult == null) {
+                webPlayerResponse = YoutubeStreamHelper.getWebMetadataPlayerResponse(
+                        localization, contentCountry, videoId);
+                throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
 
-            // The microformat JSON object of the content is only returned on the WEB client,
-            // so we need to store it instead of getting it directly from the playerResponse
-            playerMicroFormatRenderer = playerResponse.getObject("microformat")
-                    .getObject("playerMicroformatRenderer");
+                // Save response and extract microformat
+                playerResponse = webPlayerResponse;
+                playerMicroFormatRenderer = playerResponse.getObject("microformat")
+                        .getObject("playerMicroformatRenderer");
 
-            final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
+                final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
 
-            if (isVideoAgeRestricted(playabilityStatus)) {
-                fetchHtml5EmbedClient(localization, contentCountry, videoId,
-                        poTokenProviderInstance.getWebEmbedClientPoToken(videoId));
+                if (isVideoAgeRestricted(playabilityStatus)) {
+                    CompletableFuture<PoTokenResult> embedTokenFuture = CompletableFuture.supplyAsync(() -> {
+                        if (noPoTokenProviderSet) return null;
+                        try {
+                            return poTokenProviderInstance.getWebEmbedClientPoToken(videoId);
+                        } catch (Exception e) {
+                            LOG.error("Failed to get embed token", e);
+                            return null;
+                        }
+                    });
+
+                    PoTokenResult embedToken = embedTokenFuture.get(2, TimeUnit.SECONDS);
+                    fetchHtml5EmbedClient(localization, contentCountry, videoId, embedToken);
+                } else {
+                    checkPlayabilityStatus(playabilityStatus);
+
+                    CompletableFuture<JsonObject> tvResponseFuture = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return YoutubeStreamHelper.getTvHtml5PlayerResponse(
+                                    localization, contentCountry, videoId, html5Cpn,
+                                    YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
+                        } catch (Exception e) {
+                            LOG.error("Failed to get TV response", e);
+                            throw new CompletionException(e);
+                        }
+                    });
+
+                    JsonObject tvHtml5PlayerResponse = tvResponseFuture.get(3, TimeUnit.SECONDS);
+                    if (isPlayerResponseNotValid(tvHtml5PlayerResponse, videoId)) {
+                        throw new ExtractionException("TVHTML5 player response is not valid");
+                    }
+
+                    CompletableFuture.allOf(
+                            CompletableFuture.runAsync(() ->
+                                    html5StreamingData = tvHtml5PlayerResponse.getObject(STREAMING_DATA)),
+                            CompletableFuture.runAsync(() ->
+                                    playerCaptionsTracklistRenderer = tvHtml5PlayerResponse.getObject(CAPTIONS)
+                                            .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER))
+                    ).get(1, TimeUnit.SECONDS);
+                }
             } else {
-                checkPlayabilityStatus(playabilityStatus);
-                html5StreamingData = webPlayerResponse.getObject(STREAMING_DATA);
-                playerCaptionsTracklistRenderer = webPlayerResponse.getObject(CAPTIONS)
-                        .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-                html5StreamingUrlsPoToken = webPoTokenResult.streamingDataPoToken;
+                webPlayerResponse = YoutubeStreamHelper.getWebFullPlayerResponse(
+                        localization, contentCountry, videoId, html5Cpn, webPoTokenResult,
+                        Integer.parseInt(signatureTimestamp));
+
+                throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
+
+                playerResponse = webPlayerResponse;
+                playerMicroFormatRenderer = playerResponse.getObject("microformat")
+                        .getObject("playerMicroformatRenderer");
+
+                final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
+
+                if (isVideoAgeRestricted(playabilityStatus)) {
+                    CompletableFuture<PoTokenResult> embedTokenFuture = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            return poTokenProviderInstance.getWebEmbedClientPoToken(videoId);
+                        } catch (Exception e) {
+                            LOG.error("Failed to get embed token", e);
+                            throw new CompletionException(e);
+                        }
+                    });
+
+                    PoTokenResult embedToken = embedTokenFuture.get(2, TimeUnit.SECONDS);
+                    fetchHtml5EmbedClient(localization, contentCountry, videoId, embedToken);
+                } else {
+                    checkPlayabilityStatus(playabilityStatus);
+
+                    CompletableFuture.allOf(
+                            CompletableFuture.runAsync(() ->
+                                    html5StreamingData = webPlayerResponse.getObject(STREAMING_DATA)),
+                            CompletableFuture.runAsync(() ->
+                                    playerCaptionsTracklistRenderer = webPlayerResponse.getObject(CAPTIONS)
+                                            .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER)),
+                            CompletableFuture.runAsync(() ->
+                                    html5StreamingUrlsPoToken = webPoTokenResult.streamingDataPoToken)
+                    ).get(1, TimeUnit.SECONDS);
+                }
             }
+
+        } catch (TimeoutException | InterruptedException | ExecutionException e) {
+            throw new ExtractionException("Failed to fetch HTML5 client data", e);
         }
     }
 
