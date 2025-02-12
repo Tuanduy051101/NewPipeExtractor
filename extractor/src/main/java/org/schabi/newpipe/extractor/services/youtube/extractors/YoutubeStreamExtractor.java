@@ -100,6 +100,8 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.PriorityBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
@@ -828,65 +830,144 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 //    public void onFetchPage(@Nonnull final Downloader downloader)
 //            throws IOException, ExtractionException {
 //
-//        // Sử dụng CompletableFuture để thực hiện các tác vụ song song
-//        final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
+//        // 1. Tạo ExecutorService để quản lý threads
+//        final ExecutorService executor = Executors.newFixedThreadPool(4);
+//
+//        try {
+//            // 2. Fetch thông tin cơ bản song song
+//            final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
+//                try {
+//                    return getId();
+//                } catch (final ParsingException e) {
+//                    LOG.error("Failed to get video ID", e);
+//                    throw new CompletionException(e);
+//                }
+//            }, executor);
+//
+//            final CompletableFuture<Localization> localizationFuture =
+//                    CompletableFuture.supplyAsync(this::getExtractorLocalization, executor);
+//
+//            final CompletableFuture<ContentCountry> contentCountryFuture =
+//                    CompletableFuture.supplyAsync(this::getExtractorContentCountry, executor);
+//
+//            // 3. Chờ thông tin cơ bản với timeout
+//            final String videoId = videoIdFuture.get(3, TimeUnit.SECONDS);
+//            final Localization localization = localizationFuture.get(3, TimeUnit.SECONDS);
+//            final ContentCountry contentCountry = contentCountryFuture.get(3, TimeUnit.SECONDS);
+//
+//            final PoTokenProvider poTokenproviderInstance = poTokenProvider;
+//            final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
+//
+//            // 4. Fetch PoTokens song song (nếu cần)
+//            final CompletableFuture<PoTokenResult> androidTokenFuture = !noPoTokenProviderSet
+//                    ? CompletableFuture.supplyAsync(
+//                    () -> poTokenproviderInstance.getAndroidClientPoToken(videoId), executor)
+//                    : CompletableFuture.completedFuture(null);
+//
+//            final CompletableFuture<PoTokenResult> iosTokenFuture = (!noPoTokenProviderSet && fetchIosClient)
+//                    ? CompletableFuture.supplyAsync(
+//                    () -> poTokenproviderInstance.getIosClientPoToken(videoId), executor)
+//                    : CompletableFuture.completedFuture(null);
+//
+//            // 5. Fetch các clients song song
+//            final CompletableFuture<Void> html5Future = CompletableFuture.runAsync(() -> {
+//                try {
+//                    fetchHtml5Client(localization, contentCountry, videoId,
+//                            poTokenproviderInstance, noPoTokenProviderSet);
+//                    setStreamType(); // Set ngay sau khi có HTML5 data
+//                } catch (Exception e) {
+//                    LOG.error("HTML5 client failed", e);
+//                    throw new CompletionException(e);
+//                }
+//            }, executor);
+//
+//            final CompletableFuture<Void> androidFuture = CompletableFuture.runAsync(() -> {
+//                try {
+//                    final PoTokenResult androidPoTokenResult = androidTokenFuture.get(3, TimeUnit.SECONDS);
+//                    fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
+//                } catch (Exception e) {
+//                    LOG.debug("Android client failed", e);
+//                }
+//            }, executor);
+//
+//            final CompletableFuture<Void> iosFuture = fetchIosClient
+//                    ? CompletableFuture.runAsync(() -> {
+//                try {
+//                    final PoTokenResult iosPoTokenResult = iosTokenFuture.get(3, TimeUnit.SECONDS);
+//                    fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+//                } catch (Exception e) {
+//                    LOG.debug("iOS client failed", e);
+//                }
+//            }, executor)
+//                    : CompletableFuture.completedFuture(null);
+//
+//            // 6. Fetch next response song song
+//            final CompletableFuture<Void> nextResponseFuture = CompletableFuture.runAsync(() -> {
+//                try {
+//                    final byte[] nextBody = JsonWriter.string(
+//                                    prepareDesktopJsonBuilder(localization, contentCountry)
+//                                            .value(VIDEO_ID, videoId)
+//                                            .value(CONTENT_CHECK_OK, true)
+//                                            .value(RACY_CHECK_OK, true)
+//                                            .done())
+//                            .getBytes(StandardCharsets.UTF_8);
+//                    nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
+//                } catch (Exception e) {
+//                    LOG.error("Next response fetch failed", e);
+//                    throw new CompletionException(e);
+//                }
+//            }, executor);
+//
+//            // 7. Chờ các tasks quan trọng hoàn thành với timeout
 //            try {
-//                return getId();
-//            } catch (final ParsingException e) {
-//                // Xử lý ngoại lệ, có thể ghi log hoặc trả về giá trị mặc định
-//                LOG.error("e: ", e);
-//                return "defaultVideoId"; // Giá trị mặc định
+//                CompletableFuture.allOf(
+//                        html5Future,      // Bắt buộc
+//                        nextResponseFuture // Bắt buộc
+//                ).get(10, TimeUnit.SECONDS);
+//            } catch (Exception e) {
+//                throw new ExtractionException("Critical tasks failed", e);
 //            }
-//        });
-//        final CompletableFuture<Localization> localizationFuture =
-//                CompletableFuture.supplyAsync(this::getExtractorLocalization);
-//        final CompletableFuture<ContentCountry> contentCountryFuture =
-//                CompletableFuture.supplyAsync(this::getExtractorContentCountry);
 //
-//        // Chờ tất cả các tác vụ hoàn thành
-//        final String videoId = videoIdFuture.join();
-//        final Localization localization = localizationFuture.join();
-//        final ContentCountry contentCountry = contentCountryFuture.join();
+//            // 8. Chờ các tasks không quan trọng (với timeout ngắn hơn)
+//            try {
+//                CompletableFuture.allOf(
+//                        androidFuture,
+//                        iosFuture
+//                ).get(5, TimeUnit.SECONDS);
+//            } catch (Exception e) {
+//                LOG.debug("Some non-critical tasks failed or timed out", e);
+//            }
 //
-//        final PoTokenProvider poTokenproviderInstance = poTokenProvider;
-//        final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
-//
-//        fetchHtml5Client(localization, contentCountry, videoId, poTokenproviderInstance,
-//                noPoTokenProviderSet);
-//
-//        setStreamType();
-//
-//        final PoTokenResult androidPoTokenResult = noPoTokenProviderSet ? null
-//                : poTokenproviderInstance.getAndroidClientPoToken(videoId);
-//
-//        fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
-//
-//        if (fetchIosClient) {
-//            final PoTokenResult iosPoTokenResult = noPoTokenProviderSet ? null
-//                    : poTokenproviderInstance.getIosClientPoToken(videoId);
-//            fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+//        } catch (ExecutionException | InterruptedException | TimeoutException e) {
+//            throw new RuntimeException(e);
+//        } finally {
+//            // 9. Cleanup resources
+//            executor.shutdown();
+//            try {
+//                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+//                    executor.shutdownNow();
+//                }
+//            } catch (InterruptedException e) {
+//                executor.shutdownNow();
+//                Thread.currentThread().interrupt();
+//            }
 //        }
-//
-//        final byte[] nextBody = JsonWriter.string(
-//                prepareDesktopJsonBuilder(localization, contentCountry)
-//                        .value(VIDEO_ID, videoId)
-//                        .value(CONTENT_CHECK_OK, true)
-//                        .value(RACY_CHECK_OK, true)
-//                        .done())
-//                .getBytes(StandardCharsets.UTF_8);
-//        nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
 //    }
 
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
 
-        // 1. Tạo ExecutorService để quản lý threads
-        final ExecutorService executor = Executors.newFixedThreadPool(4);
+        // 1. Tạo ExecutorService với priority
+        final ExecutorService executor = new ThreadPoolExecutor(
+                4, 8,
+                60L, TimeUnit.SECONDS,
+                new PriorityBlockingQueue<>());
 
         try {
-            // 2. Fetch thông tin cơ bản song song
+            // 2. Fetch thông tin cơ bản song song với priority cao
             final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
+                Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
                 try {
                     return getId();
                 } catch (final ParsingException e) {
@@ -901,27 +982,17 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             final CompletableFuture<ContentCountry> contentCountryFuture =
                     CompletableFuture.supplyAsync(this::getExtractorContentCountry, executor);
 
-            // 3. Chờ thông tin cơ bản với timeout
-            final String videoId = videoIdFuture.get(3, TimeUnit.SECONDS);
-            final Localization localization = localizationFuture.get(3, TimeUnit.SECONDS);
-            final ContentCountry contentCountry = contentCountryFuture.get(3, TimeUnit.SECONDS);
+            // 3. Chờ thông tin cơ bản với timeout ngắn
+            final String videoId = videoIdFuture.get(2, TimeUnit.SECONDS);
+            final Localization localization = localizationFuture.get(2, TimeUnit.SECONDS);
+            final ContentCountry contentCountry = contentCountryFuture.get(2, TimeUnit.SECONDS);
 
             final PoTokenProvider poTokenproviderInstance = poTokenProvider;
             final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
 
-            // 4. Fetch PoTokens song song (nếu cần)
-            final CompletableFuture<PoTokenResult> androidTokenFuture = !noPoTokenProviderSet
-                    ? CompletableFuture.supplyAsync(
-                    () -> poTokenproviderInstance.getAndroidClientPoToken(videoId), executor)
-                    : CompletableFuture.completedFuture(null);
-
-            final CompletableFuture<PoTokenResult> iosTokenFuture = (!noPoTokenProviderSet && fetchIosClient)
-                    ? CompletableFuture.supplyAsync(
-                    () -> poTokenproviderInstance.getIosClientPoToken(videoId), executor)
-                    : CompletableFuture.completedFuture(null);
-
-            // 5. Fetch các clients song song
+            // 4. Fetch HTML5 client trước tiên với priority cao nhất
             final CompletableFuture<Void> html5Future = CompletableFuture.runAsync(() -> {
+                Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
                 try {
                     fetchHtml5Client(localization, contentCountry, videoId,
                             poTokenproviderInstance, noPoTokenProviderSet);
@@ -932,70 +1003,70 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                 }
             }, executor);
 
-            final CompletableFuture<Void> androidFuture = CompletableFuture.runAsync(() -> {
-                try {
-                    final PoTokenResult androidPoTokenResult = androidTokenFuture.get(3, TimeUnit.SECONDS);
-                    fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
-                } catch (Exception e) {
-                    LOG.debug("Android client failed", e);
-                }
-            }, executor);
-
-            final CompletableFuture<Void> iosFuture = fetchIosClient
-                    ? CompletableFuture.runAsync(() -> {
-                try {
-                    final PoTokenResult iosPoTokenResult = iosTokenFuture.get(3, TimeUnit.SECONDS);
-                    fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
-                } catch (Exception e) {
-                    LOG.debug("iOS client failed", e);
-                }
-            }, executor)
-                    : CompletableFuture.completedFuture(null);
-
-            // 6. Fetch next response song song
-            final CompletableFuture<Void> nextResponseFuture = CompletableFuture.runAsync(() -> {
-                try {
-                    final byte[] nextBody = JsonWriter.string(
-                                    prepareDesktopJsonBuilder(localization, contentCountry)
-                                            .value(VIDEO_ID, videoId)
-                                            .value(CONTENT_CHECK_OK, true)
-                                            .value(RACY_CHECK_OK, true)
-                                            .done())
-                            .getBytes(StandardCharsets.UTF_8);
-                    nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
-                } catch (Exception e) {
-                    LOG.error("Next response fetch failed", e);
-                    throw new CompletionException(e);
-                }
-            }, executor);
-
-            // 7. Chờ các tasks quan trọng hoàn thành với timeout
+            // 5. Chờ HTML5 client hoàn thành trước
             try {
-                CompletableFuture.allOf(
-                        html5Future,      // Bắt buộc
-                        nextResponseFuture // Bắt buộc
-                ).get(10, TimeUnit.SECONDS);
+                html5Future.get(5, TimeUnit.SECONDS);
             } catch (Exception e) {
-                throw new ExtractionException("Critical tasks failed", e);
+                throw new ExtractionException("HTML5 client failed - cannot load video", e);
             }
 
-            // 8. Chờ các tasks không quan trọng (với timeout ngắn hơn)
-            try {
-                CompletableFuture.allOf(
-                        androidFuture,
-                        iosFuture
-                ).get(5, TimeUnit.SECONDS);
-            } catch (Exception e) {
-                LOG.debug("Some non-critical tasks failed or timed out", e);
-            }
+            // 6. Fetch các thông tin phụ với priority thấp hơn
+            CompletableFuture.allOf(
+                    // Android client
+                    CompletableFuture.runAsync(() -> {
+                        Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
+                        try {
+                            if (!noPoTokenProviderSet) {
+                                final PoTokenResult androidPoTokenResult =
+                                        poTokenproviderInstance.getAndroidClientPoToken(videoId);
+                                fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
+                            }
+                        } catch (Exception e) {
+                            LOG.debug("Android client failed", e);
+                        }
+                    }, executor),
+
+                    // iOS client
+                    fetchIosClient ? CompletableFuture.runAsync(() -> {
+                        Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
+                        try {
+                            if (!noPoTokenProviderSet) {
+                                final PoTokenResult iosPoTokenResult =
+                                        poTokenproviderInstance.getIosClientPoToken(videoId);
+                                fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+                            }
+                        } catch (Exception e) {
+                            LOG.debug("iOS client failed", e);
+                        }
+                    }, executor) : CompletableFuture.completedFuture(null),
+
+                    // Next videos
+                    CompletableFuture.runAsync(() -> {
+                        Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
+                        try {
+                            final byte[] nextBody = JsonWriter.string(
+                                            prepareDesktopJsonBuilder(localization, contentCountry)
+                                                    .value(VIDEO_ID, videoId)
+                                                    .value(CONTENT_CHECK_OK, true)
+                                                    .value(RACY_CHECK_OK, true)
+                                                    .done())
+                                    .getBytes(StandardCharsets.UTF_8);
+                            nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
+                        } catch (Exception e) {
+                            LOG.debug("Next response fetch failed", e);
+                        }
+                    }, executor)
+            ).get(8, TimeUnit.SECONDS); // Timeout dài hơn cho các tasks phụ
 
         } catch (ExecutionException | InterruptedException | TimeoutException e) {
-            throw new RuntimeException(e);
+            if (html5StreamingData == null) { // Chỉ throw nếu chưa có video data
+                throw new ExtractionException("Failed to load video data", e);
+            }
+            LOG.debug("Some non-critical tasks failed", e);
         } finally {
-            // 9. Cleanup resources
             executor.shutdown();
             try {
-                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
                     executor.shutdownNow();
                 }
             } catch (InterruptedException e) {
@@ -1064,88 +1135,6 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         throw new ContentNotAvailableException("Got error: \"" + reason + "\"");
     }
 
-//    private void fetchHtml5Client(@Nonnull final Localization localization,
-//                                  @Nonnull final ContentCountry contentCountry,
-//                                  @Nonnull final String videoId,
-//                                  @Nullable final PoTokenProvider poTokenProviderInstance,
-//                                  final boolean noPoTokenProviderSet)
-//            throws IOException, ExtractionException {
-//        html5Cpn = generateContentPlaybackNonce();
-//
-//        // Suppress NPE warning as nullability is already checked before and passed with
-//        // noPoTokenProviderSet
-//        //noinspection DataFlowIssue
-//        final PoTokenResult webPoTokenResult = noPoTokenProviderSet ? null
-//                : poTokenProviderInstance.getWebClientPoToken(videoId);
-//        final JsonObject webPlayerResponse;
-//        if (noPoTokenProviderSet || webPoTokenResult == null) {
-//            webPlayerResponse = YoutubeStreamHelper.getWebMetadataPlayerResponse(
-//                    localization, contentCountry, videoId);
-//
-//            throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
-//
-//            // Save the webPlayerResponse into playerResponse in the case the video cannot be
-//            // played, so some metadata can be retrieved
-//            playerResponse = webPlayerResponse;
-//
-//            // The microformat JSON object of the content is only returned on the WEB client,
-//            // so we need to store it instead of getting it directly from the playerResponse
-//            playerMicroFormatRenderer = playerResponse.getObject("microformat")
-//                    .getObject("playerMicroformatRenderer");
-//
-//            final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
-//
-//            if (isVideoAgeRestricted(playabilityStatus)) {
-//                fetchHtml5EmbedClient(localization, contentCountry, videoId,
-//                        noPoTokenProviderSet ? null
-//                                : poTokenProviderInstance.getWebEmbedClientPoToken(videoId));
-//            } else {
-//                checkPlayabilityStatus(playabilityStatus);
-//
-//                final JsonObject tvHtml5PlayerResponse =
-//                        YoutubeStreamHelper.getTvHtml5PlayerResponse(
-//                                localization, contentCountry, videoId, html5Cpn,
-//                                YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
-//
-//                if (isPlayerResponseNotValid(tvHtml5PlayerResponse, videoId)) {
-//                    throw new ExtractionException("TVHTML5 player response is not valid");
-//                }
-//
-//                html5StreamingData = tvHtml5PlayerResponse.getObject(STREAMING_DATA);
-//                playerCaptionsTracklistRenderer = tvHtml5PlayerResponse.getObject(CAPTIONS)
-//                        .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-//            }
-//        } else {
-//            webPlayerResponse = YoutubeStreamHelper.getWebFullPlayerResponse(
-//                    localization, contentCountry, videoId, html5Cpn, webPoTokenResult,
-//                    YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
-//
-//            throwExceptionIfPlayerResponseNotValid(webPlayerResponse, videoId);
-//
-//            // Save the webPlayerResponse into playerResponse in the case the video cannot be
-//            // played, so some metadata can be retrieved
-//            playerResponse = webPlayerResponse;
-//
-//            // The microformat JSON object of the content is only returned on the WEB client,
-//            // so we need to store it instead of getting it directly from the playerResponse
-//            playerMicroFormatRenderer = playerResponse.getObject("microformat")
-//                    .getObject("playerMicroformatRenderer");
-//
-//            final JsonObject playabilityStatus = webPlayerResponse.getObject(PLAYABILITY_STATUS);
-//
-//            if (isVideoAgeRestricted(playabilityStatus)) {
-//                fetchHtml5EmbedClient(localization, contentCountry, videoId,
-//                        poTokenProviderInstance.getWebEmbedClientPoToken(videoId));
-//            } else {
-//                checkPlayabilityStatus(playabilityStatus);
-//                html5StreamingData = webPlayerResponse.getObject(STREAMING_DATA);
-//                playerCaptionsTracklistRenderer = webPlayerResponse.getObject(CAPTIONS)
-//                        .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-//                html5StreamingUrlsPoToken = webPoTokenResult.streamingDataPoToken;
-//            }
-//        }
-//    }
-
     private void fetchHtml5Client(@Nonnull final Localization localization,
                                   @Nonnull final ContentCountry contentCountry,
                                   @Nonnull final String videoId,
@@ -1155,7 +1144,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         try {
             // 1. Parallel fetch các thông tin cần thiết
             CompletableFuture<String> cpnFuture = CompletableFuture.supplyAsync(
-                    () -> generateContentPlaybackNonce()
+                    YoutubeParsingHelper::generateContentPlaybackNonce
             );
 
             CompletableFuture<String> signatureTimestampFuture = CompletableFuture.supplyAsync(() -> {
@@ -1326,70 +1315,6 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             html5StreamingUrlsPoToken = webEmbedPoTokenResult.streamingDataPoToken;
         }
     }
-
-//    private void fetchAndroidClient(@Nonnull final Localization localization,
-//                                    @Nonnull final ContentCountry contentCountry,
-//                                    @Nonnull final String videoId,
-//                                    @Nullable final PoTokenResult androidPoTokenResult) {
-//        try {
-//            androidCpn = generateContentPlaybackNonce();
-//
-//            final JsonObject androidPlayerResponse;
-//            if (androidPoTokenResult == null) {
-//                androidPlayerResponse = YoutubeStreamHelper.getAndroidReelPlayerResponse(
-//                        contentCountry, localization, videoId, androidCpn);
-//            } else {
-//                androidPlayerResponse = YoutubeStreamHelper.getAndroidPlayerResponse(
-//                        contentCountry, localization, videoId, androidCpn,
-//                        androidPoTokenResult);
-//            }
-//
-//            if (!isPlayerResponseNotValid(androidPlayerResponse, videoId)) {
-//                androidStreamingData = androidPlayerResponse.getObject(STREAMING_DATA);
-//
-//                if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
-//                    playerCaptionsTracklistRenderer =
-//                            androidPlayerResponse.getObject(CAPTIONS)
-//                                    .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-//                }
-//
-//                if (androidPoTokenResult != null) {
-//                    androidStreamingUrlsPoToken = androidPoTokenResult.streamingDataPoToken;
-//                }
-//            }
-//        } catch (final Exception ignored) {
-//            // Ignore exceptions related to ANDROID client fetch or parsing, as it is not
-//            // compulsory to play contents
-//        }
-//    }
-//
-//    private void fetchIosClient(@Nonnull final Localization localization,
-//                                @Nonnull final ContentCountry contentCountry,
-//                                @Nonnull final String videoId,
-//                                @Nullable final PoTokenResult iosPoTokenResult) {
-//        try {
-//            iosCpn = generateContentPlaybackNonce();
-//
-//            final JsonObject iosPlayerResponse = YoutubeStreamHelper.getIosPlayerResponse(
-//                    contentCountry, localization, videoId, iosCpn, iosPoTokenResult);
-//
-//            if (!isPlayerResponseNotValid(iosPlayerResponse, videoId)) {
-//                iosStreamingData = iosPlayerResponse.getObject(STREAMING_DATA);
-//
-//                if (isNullOrEmpty(playerCaptionsTracklistRenderer)) {
-//                    playerCaptionsTracklistRenderer = iosPlayerResponse.getObject(CAPTIONS)
-//                            .getObject(PLAYER_CAPTIONS_TRACKLIST_RENDERER);
-//                }
-//
-//                if (iosPoTokenResult != null) {
-//                    iosStreamingUrlsPoToken = iosPoTokenResult.streamingDataPoToken;
-//                }
-//            }
-//        } catch (final Exception ignored) {
-//            // Ignore exceptions related to IOS client fetch or parsing, as it is not
-//            // compulsory to play contents
-//        }
-//    }
 
     private void fetchAndroidClient(@Nonnull final Localization localization,
                                     @Nonnull final ContentCountry contentCountry,
