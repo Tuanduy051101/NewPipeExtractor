@@ -99,8 +99,9 @@ import java.util.Objects;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.PriorityBlockingQueue;
+//import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+//import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -958,11 +959,11 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException {
 
-        // 1. Tạo ExecutorService với priority
+        // 1. Tạo ExecutorService với LinkedBlockingQueue
         final ExecutorService executor = new ThreadPoolExecutor(
                 4, 8,
                 60L, TimeUnit.SECONDS,
-                new PriorityBlockingQueue<>());
+                new LinkedBlockingQueue<>(100)); // Thay thế PriorityBlockingQueue
 
         try {
             // 2. Fetch thông tin cơ bản song song với priority cao
