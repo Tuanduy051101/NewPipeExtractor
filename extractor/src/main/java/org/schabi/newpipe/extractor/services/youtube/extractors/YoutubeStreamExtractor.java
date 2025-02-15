@@ -1006,7 +1006,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
             // 5. Chờ HTML5 client hoàn thành trước
             try {
-                html5Future.get(5, TimeUnit.SECONDS);
+                html5Future.get(15, TimeUnit.SECONDS);
             } catch (Exception e) {
                 throw new ExtractionException("HTML5 client failed - cannot load video", e);
             }
@@ -1057,7 +1057,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                             LOG.debug("Next response fetch failed", e);
                         }
                     }, executor)
-            ).get(8, TimeUnit.SECONDS); // Timeout dài hơn cho các tasks phụ
+            ).get(15, TimeUnit.SECONDS); // Timeout dài hơn cho các tasks phụ
 
         } catch (ExecutionException | InterruptedException | TimeoutException e) {
             if (html5StreamingData == null) { // Chỉ throw nếu chưa có video data
@@ -1067,7 +1067,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
         } finally {
             executor.shutdown();
             try {
-                if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
                     executor.shutdownNow();
                 }
             } catch (InterruptedException e) {
