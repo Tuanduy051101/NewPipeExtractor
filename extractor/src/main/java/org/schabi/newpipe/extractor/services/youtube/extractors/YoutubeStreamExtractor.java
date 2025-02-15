@@ -994,13 +994,30 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             // 4. Fetch HTML5 client trước tiên với priority cao nhất
             final CompletableFuture<Void> html5Future = CompletableFuture.runAsync(() -> {
                 Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
-                try {
-                    fetchHtml5Client(localization, contentCountry, videoId,
-                            poTokenproviderInstance, noPoTokenProviderSet);
-                    setStreamType(); // Set ngay sau khi có HTML5 data
-                } catch (Exception e) {
-                    LOG.error("HTML5 client failed", e);
-                    throw new CompletionException(e);
+                int retryCount = 0;
+                int maxRetries = 3;  // HTML5 client quan trọng nhất nên số lần retry ít hơn
+
+                while (retryCount < maxRetries) {
+                    try {
+                        fetchHtml5Client(localization, contentCountry, videoId,
+                                poTokenproviderInstance, noPoTokenProviderSet);
+                        setStreamType();
+                        return; // Thành công thì thoát
+                    } catch (Exception e) {
+                        retryCount++;
+                        LOG.error("HTML5 client failed on attempt: " + retryCount + "/" + maxRetries, e);
+
+//                        if (retryCount >= maxRetries) {
+//                            throw new CompletionException(e);
+//                        }
+
+//                        try {
+//                            Thread.sleep(1000 * retryCount); // Delay tăng dần
+//                        } catch (InterruptedException ie) {
+//                            Thread.currentThread().interrupt();
+//                            throw new CompletionException(ie);
+//                        }
+                    }
                 }
             }, executor);
 
@@ -1016,28 +1033,60 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                     // Android client
                     CompletableFuture.runAsync(() -> {
                         Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
-                        try {
-                            if (!noPoTokenProviderSet) {
-                                final PoTokenResult androidPoTokenResult =
-                                        poTokenproviderInstance.getAndroidClientPoToken(videoId);
-                                fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
+                        int retryCount = 0;
+                        int maxRetries = 5;
+
+                        while (retryCount < maxRetries) {
+                            try {
+                                if (!noPoTokenProviderSet) {
+                                    final PoTokenResult androidPoTokenResult =
+                                            poTokenproviderInstance.getAndroidClientPoToken(videoId);
+                                    fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
+                                }
+                                break; // Thành công thì thoát
+                            } catch (Exception e) {
+                                retryCount++;
+                                LOG.debug("Android client failed on attempt: " + retryCount + "/" + maxRetries, e);
+
+//                                if (retryCount < maxRetries) {
+//                                    try {
+//                                        Thread.sleep(1000 * retryCount);
+//                                    } catch (InterruptedException ie) {
+//                                        Thread.currentThread().interrupt();
+//                                        break;
+//                                    }
+//                                }
                             }
-                        } catch (Exception e) {
-                            LOG.debug("Android client failed", e);
                         }
                     }, executor),
 
                     // iOS client
                     fetchIosClient ? CompletableFuture.runAsync(() -> {
                         Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
-                        try {
-                            if (!noPoTokenProviderSet) {
-                                final PoTokenResult iosPoTokenResult =
-                                        poTokenproviderInstance.getIosClientPoToken(videoId);
-                                fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+                        int retryCount = 0;
+                        int maxRetries = 5;
+
+                        while (retryCount < maxRetries) {
+                            try {
+                                if (!noPoTokenProviderSet) {
+                                    final PoTokenResult iosPoTokenResult =
+                                            poTokenproviderInstance.getIosClientPoToken(videoId);
+                                    fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
+                                }
+                                break; // Thành công thì thoát
+                            } catch (Exception e) {
+                                retryCount++;
+                                LOG.debug("iOS client failed on attempt: " + retryCount + "/" + maxRetries, e);
+
+//                                if (retryCount < maxRetries) {
+//                                    try {
+//                                        Thread.sleep(1000 * retryCount);
+//                                    } catch (InterruptedException ie) {
+//                                        Thread.currentThread().interrupt();
+//                                        break;
+//                                    }
+//                                }
                             }
-                        } catch (Exception e) {
-                            LOG.debug("iOS client failed", e);
                         }
                     }, executor) : CompletableFuture.completedFuture(null),
 
@@ -1045,7 +1094,7 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                     CompletableFuture.runAsync(() -> {
                         Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
                         int retryCount = 0;
-                        int maxRetries = 2;
+                        int maxRetries = 5;
 
                         while (retryCount < maxRetries) {
                             try {
@@ -1068,15 +1117,15 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                                 LOG.debug("Related videos fetch failed on attempt: " + (retryCount + 1), e);
                                 retryCount++;
 
-                                if (retryCount < maxRetries) {
-                                    // Chờ một chút trước khi retry
-                                    try {
-                                        Thread.sleep(1000 * retryCount); // Tăng delay theo số lần retry
-                                    } catch (InterruptedException ie) {
-                                        Thread.currentThread().interrupt();
-                                        break;
-                                    }
-                                }
+//                                if (retryCount < maxRetries) {
+//                                    // Chờ một chút trước khi retry
+//                                    try {
+//                                        Thread.sleep(1000 * retryCount); // Tăng delay theo số lần retry
+//                                    } catch (InterruptedException ie) {
+//                                        Thread.currentThread().interrupt();
+//                                        break;
+//                                    }
+//                                }
                             }
                         }
                     }, executor)
