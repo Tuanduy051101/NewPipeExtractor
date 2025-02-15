@@ -1044,17 +1044,40 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                     // Next videos
                     CompletableFuture.runAsync(() -> {
                         Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
-                        try {
-                            final byte[] nextBody = JsonWriter.string(
-                                            prepareDesktopJsonBuilder(localization, contentCountry)
-                                                    .value(VIDEO_ID, videoId)
-                                                    .value(CONTENT_CHECK_OK, true)
-                                                    .value(RACY_CHECK_OK, true)
-                                                    .done())
-                                    .getBytes(StandardCharsets.UTF_8);
-                            nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
-                        } catch (Exception e) {
-                            LOG.debug("Next response fetch failed", e);
+                        int retryCount = 0;
+                        int maxRetries = 2;
+
+                        while (retryCount < maxRetries) {
+                            try {
+                                final byte[] nextBody = JsonWriter.string(
+                                                prepareDesktopJsonBuilder(localization, contentCountry)
+                                                        .value(VIDEO_ID, videoId)
+                                                        .value(CONTENT_CHECK_OK, true)
+                                                        .value(RACY_CHECK_OK, true)
+                                                        .done())
+                                        .getBytes(StandardCharsets.UTF_8);
+                                nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
+
+                                // Nếu thành công thì thoát
+                                if (nextResponse != null) {
+                                    LOG.debug("Related videos loaded successfully on attempt: " + (retryCount + 1));
+                                    break;
+                                }
+
+                            } catch (Exception e) {
+                                LOG.debug("Related videos fetch failed on attempt: " + (retryCount + 1), e);
+                                retryCount++;
+
+                                if (retryCount < maxRetries) {
+                                    // Chờ một chút trước khi retry
+                                    try {
+                                        Thread.sleep(1000 * retryCount); // Tăng delay theo số lần retry
+                                    } catch (InterruptedException ie) {
+                                        Thread.currentThread().interrupt();
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }, executor)
             ).get(15, TimeUnit.SECONDS); // Timeout dài hơn cho các tasks phụ
