@@ -304,6 +304,48 @@ public final class YoutubeStreamHelper {
                 getDownloader().postWithContentTypeJson(url, headers, body, localization)));
     }
 
+    /**
+     * Tải nhanh thông tin cơ bản của video YouTube
+     * Chỉ tải các thông tin cần thiết để phát video
+     */
+    @Nonnull
+    public static JsonObject getFastPlayerResponse(
+            @Nonnull final Localization localization,
+            @Nonnull final ContentCountry contentCountry,
+            @Nonnull final String videoId) throws IOException, ExtractionException {
+        
+        // Sử dụng TVHTML5 client vì nó thường nhanh hơn và ít bị giới hạn
+        final InnertubeClientRequestInfo innertubeClientRequestInfo =
+                InnertubeClientRequestInfo.ofTvHtml5Client();
+        
+        final Map<String, List<String>> headers = new HashMap<>(
+                getClientHeaders(TVHTML5_CLIENT_ID, TVHTML5_CLIENT_VERSION));
+        headers.putAll(getOriginReferrerHeaders("https://www.youtube.com"));
+        headers.put("User-Agent", List.of(TVHTML5_USER_AGENT));
+        
+        // Tạo CPN (Content Playback Nonce)
+        final String cpn = YoutubeParsingHelper.generateContentPlaybackNonce();
+        
+        final JsonBuilder<JsonObject> builder = prepareJsonBuilder(localization, contentCountry,
+                innertubeClientRequestInfo, null);
+        
+        addVideoIdCpnAndOkChecks(builder, videoId, cpn);
+        
+        // Thêm các tham số cần thiết
+        final int signatureTimestamp = YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId);
+        addPlaybackContext(builder, BASE_YT_DESKTOP_WATCH_URL + videoId, signatureTimestamp);
+        
+        final byte[] body = JsonWriter.string(builder.done())
+                .getBytes(StandardCharsets.UTF_8);
+        
+        // Chỉ yêu cầu các trường cần thiết để giảm kích thước phản hồi
+        final String url = YOUTUBEI_V1_URL + PLAYER + "?" + DISABLE_PRETTY_PRINT_PARAMETER
+                + "&$fields=streamingData,videoDetails,playabilityStatus";
+        
+        return JsonUtils.toJsonObject(getValidJsonResponseBody(
+                getDownloader().postWithContentTypeJson(url, headers, body, localization)));
+    }
+
     private static void addVideoIdCpnAndOkChecks(@Nonnull final JsonBuilder<JsonObject> builder,
                                                  @Nonnull final String videoId,
                                                  @Nullable final String cpn) {

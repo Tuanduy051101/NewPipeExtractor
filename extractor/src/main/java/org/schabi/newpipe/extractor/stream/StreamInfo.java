@@ -387,6 +387,9 @@ public class StreamInfo extends Info {
      */
     private List<Frameset> previewFrames = List.of();
 
+    // Thêm trường để đánh dấu trạng thái tải
+    private boolean basicInfoOnly = false;
+
     /**
      * Get the stream type
      *
@@ -726,5 +729,136 @@ public class StreamInfo extends Info {
 
     public void setShortFormContent(final boolean isShortFormContent) {
         this.shortFormContent = isShortFormContent;
+    }
+
+    public boolean isBasicInfoOnly() {
+        return basicInfoOnly;
+    }
+
+    public void setBasicInfoOnly(boolean basicInfoOnly) {
+        this.basicInfoOnly = basicInfoOnly;
+    }
+
+    /**
+     * Tải nhanh thông tin cơ bản của video để có thể phát ngay lập tức
+     * Chỉ tải URL phát, tiêu đề và thumbnail cơ bản
+     */
+    public static StreamInfo getBasicInfo(int serviceId, String url) 
+            throws IOException, ExtractionException {
+        return getBasicInfo(serviceId, url, NewPipe.getPreferredLocalization());
+    }
+
+    /**
+     * Tải nhanh thông tin cơ bản của video với ngôn ngữ cụ thể
+     */
+    public static StreamInfo getBasicInfo(int serviceId, String url, Localization localization) 
+            throws IOException, ExtractionException {
+        return getBasicInfo(serviceId, url, localization, NewPipe.getPreferredContentCountry());
+    }
+
+    /**
+     * Tải nhanh thông tin cơ bản của video với ngôn ngữ và quốc gia cụ thể
+     */
+    public static StreamInfo getBasicInfo(int serviceId, String url, Localization localization, 
+            ContentCountry contentCountry) throws IOException, ExtractionException {
+        final StreamExtractor extractor = NewPipe.getService(serviceId)
+                .getStreamExtractor(url);
+        extractor.setContentCountry(contentCountry);
+        extractor.setLocalization(localization);
+        
+        // Chỉ tải thông tin cơ bản
+        final StreamInfo streamInfo = new StreamInfo(serviceId, extractor, url);
+        
+        try {
+            // Tải thông tin cơ bản
+            streamInfo.setName(extractor.getName());
+            streamInfo.setUrl(extractor.getUrl());
+            streamInfo.setOriginalUrl(extractor.getOriginalUrl());
+            
+            // Tải URL phát video (điều quan trọng nhất)
+            streamInfo.setVideoStreams(extractor.getVideoStreams());
+            streamInfo.setVideoOnlyStreams(extractor.getVideoOnlyStreams());
+            streamInfo.setAudioStreams(extractor.getAudioStreams());
+            
+            // Tải thumbnail cơ bản nếu có
+            try {
+                streamInfo.setThumbnails(extractor.getThumbnails());
+            } catch (Exception e) {
+                // Bỏ qua lỗi thumbnail, không quan trọng cho việc phát
+            }
+            
+            // Đánh dấu là chỉ có thông tin cơ bản
+            streamInfo.setBasicInfoOnly(true);
+        } catch (Exception e) {
+            // Nếu có lỗi, thử tải đầy đủ thông tin
+            return getInfo(serviceId, url, localization, contentCountry);
+        }
+        
+        return streamInfo;
+    }
+
+    /**
+     * Tải các thông tin còn lại trong nền sau khi đã tải thông tin cơ bản
+     */
+    public void loadRemainingInfo() throws IOException, ExtractionException {
+        if (!basicInfoOnly) {
+            return; // Đã tải đầy đủ thông tin
+        }
+        
+        final StreamExtractor extractor = NewPipe.getService(getServiceId())
+                .getStreamExtractor(getUrl());
+        extractor.setContentCountry(contentCountry);
+        extractor.setLocalization(localization);
+        
+        // Tải các thông tin còn lại
+        try {
+            // Thông tin kênh
+            if (getUploaderUrl() == null) {
+                setUploaderUrl(extractor.getUploaderUrl());
+            }
+            if (getUploaderName() == null) {
+                setUploaderName(extractor.getUploaderName());
+            }
+            if (getUploaderAvatars() == null || getUploaderAvatars().isEmpty()) {
+                setUploaderAvatars(extractor.getUploaderAvatars());
+            }
+            
+            // Thông tin mô tả và metadata
+            if (getDescription() == null) {
+                setDescription(extractor.getDescription());
+            }
+            if (getViewCount() == -1) {
+                setViewCount(extractor.getViewCount());
+            }
+            if (getLikeCount() == -1) {
+                setLikeCount(extractor.getLikeCount());
+            }
+            if (getDislikeCount() == -1) {
+                setDislikeCount(extractor.getDislikeCount());
+            }
+            if (getSubChannelAvatars() == null || getSubChannelAvatars().isEmpty()) {
+                setSubChannelAvatars(extractor.getSubChannelAvatars());
+            }
+            
+            // Các thông tin khác
+            if (getTextualUploadDate() == null) {
+                setTextualUploadDate(extractor.getTextualUploadDate());
+            }
+            if (getUploadDate() == null) {
+                setUploadDate(extractor.getUploadDate());
+            }
+            if (getTags() == null || getTags().isEmpty()) {
+                setTags(extractor.getTags());
+            }
+            if (getStreamSegments() == null || getStreamSegments().isEmpty()) {
+                setStreamSegments(extractor.getStreamSegments());
+            }
+            
+            // Đánh dấu là đã tải đầy đủ thông tin
+            setBasicInfoOnly(false);
+        } catch (Exception e) {
+            // Bỏ qua lỗi khi tải thông tin bổ sung
+            // Video vẫn có thể phát với thông tin cơ bản
+        }
     }
 }

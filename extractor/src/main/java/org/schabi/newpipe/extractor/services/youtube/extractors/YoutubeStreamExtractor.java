@@ -2131,4 +2131,154 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     public static void setFetchIosClient(final boolean fetchIosClient) {
         YoutubeStreamExtractor.fetchIosClient = fetchIosClient;
     }
+
+    /**
+     * Tải nhanh các URL phát video, chỉ tải thông tin cần thiết để phát video
+     * Các thông tin khác sẽ được tải sau trong nền
+     */
+    public List<VideoStream> getFastVideoStreams() throws ExtractionException {
+        try {
+            // Chỉ tải dữ liệu streaming từ một client (ưu tiên HTML5)
+            if (html5StreamingData == null) {
+                final String videoId = getId();
+                final String html5Cpn = generateContentPlaybackNonce();
+                
+                // Tải nhanh thông tin từ HTML5 client
+                JsonObject tvHtml5PlayerResponse = YoutubeStreamHelper.getTvHtml5PlayerResponse(
+                        getExtractorLocalization(), getExtractorContentCountry(), videoId, html5Cpn,
+                        YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
+                
+                if (isPlayerResponseNotValid(tvHtml5PlayerResponse, videoId)) {
+                    throw new ExtractionException("TVHTML5 player response is not valid");
+                }
+                
+                html5StreamingData = tvHtml5PlayerResponse.getObject(STREAMING_DATA);
+            }
+            
+            // Chỉ xử lý các định dạng video phổ biến để tăng tốc độ
+            return getVideoStreamsFromStreamingData(html5StreamingData, false);
+        } catch (Exception e) {
+            throw new ExtractionException("Could not get fast video streams", e);
+        }
+    }
+
+    /**
+     * Tải nhanh các URL phát audio, chỉ tải thông tin cần thiết để phát audio
+     */
+    public List<AudioStream> getFastAudioStreams() throws ExtractionException {
+        try {
+            // Chỉ tải dữ liệu streaming từ một client (ưu tiên HTML5)
+            if (html5StreamingData == null) {
+                final String videoId = getId();
+                final String html5Cpn = generateContentPlaybackNonce();
+                
+                // Tải nhanh thông tin từ HTML5 client
+                JsonObject tvHtml5PlayerResponse = YoutubeStreamHelper.getTvHtml5PlayerResponse(
+                        getExtractorLocalization(), getExtractorContentCountry(), videoId, html5Cpn,
+                        YoutubeJavaScriptPlayerManager.getSignatureTimestamp(videoId));
+                
+                if (isPlayerResponseNotValid(tvHtml5PlayerResponse, videoId)) {
+                    throw new ExtractionException("TVHTML5 player response is not valid");
+                }
+                
+                html5StreamingData = tvHtml5PlayerResponse.getObject(STREAMING_DATA);
+            }
+            
+            // Chỉ xử lý các định dạng audio phổ biến để tăng tốc độ
+            return getAudioStreamsFromStreamingData(html5StreamingData);
+        } catch (Exception e) {
+            throw new ExtractionException("Could not get fast audio streams", e);
+        }
+    }
+
+    /**
+     * Tối ưu hóa phương thức getVideoStreamsFromStreamingData để ưu tiên các định dạng phổ biến
+     */
+    private List<VideoStream> getVideoStreamsFromStreamingData(
+            @Nonnull final JsonObject streamingData, final boolean isAdaptiveFormats) 
+            throws ParsingException {
+        final List<VideoStream> videoStreams = new ArrayList<>();
+        
+        final JsonArray formats = isAdaptiveFormats 
+                ? streamingData.getArray(ADAPTIVE_FORMATS) 
+                : streamingData.getArray(FORMATS);
+        
+        // Danh sách các itag phổ biến để ưu tiên xử lý trước
+        final List<Integer> priorityItags = Arrays.asList(
+                // Các định dạng phổ biến: 360p, 720p
+                18, 22, 
+                // Các định dạng VP9: 360p, 720p
+                243, 247, 
+                // Các định dạng H264: 360p, 720p
+                134, 136
+        );
+        
+        // Xử lý các định dạng ưu tiên trước
+        for (int i = 0; i < formats.size(); i++) {
+            final JsonObject formatData = formats.getObject(i);
+            final int itag = formatData.getInt(ITAG);
+            
+            if (priorityItags.contains(itag)) {
+                final VideoStream videoStream = getVideoStreamFromFormat(formatData);
+                if (videoStream != null) {
+                    videoStreams.add(videoStream);
+                }
+            }
+        }
+        
+        // Nếu không tìm thấy định dạng ưu tiên, xử lý tất cả các định dạng
+        if (videoStreams.isEmpty()) {
+            for (int i = 0; i < formats.size(); i++) {
+                final JsonObject formatData = formats.getObject(i);
+                final VideoStream videoStream = getVideoStreamFromFormat(formatData);
+                if (videoStream != null) {
+                    videoStreams.add(videoStream);
+                }
+            }
+        }
+        
+        return videoStreams;
+    }
+
+    /**
+     * Tối ưu hóa phương thức getAudioStreamsFromStreamingData để ưu tiên các định dạng phổ biến
+     */
+    private List<AudioStream> getAudioStreamsFromStreamingData(
+            @Nonnull final JsonObject streamingData) throws ParsingException {
+        final List<AudioStream> audioStreams = new ArrayList<>();
+        
+        final JsonArray adaptiveFormats = streamingData.getArray(ADAPTIVE_FORMATS);
+        
+        // Danh sách các itag phổ biến để ưu tiên xử lý trước
+        final List<Integer> priorityItags = Arrays.asList(
+                // Các định dạng audio phổ biến: medium, high
+                140, 251
+        );
+        
+        // Xử lý các định dạng ưu tiên trước
+        for (int i = 0; i < adaptiveFormats.size(); i++) {
+            final JsonObject formatData = adaptiveFormats.getObject(i);
+            final int itag = formatData.getInt(ITAG);
+            
+            if (priorityItags.contains(itag)) {
+                final AudioStream audioStream = getAudioStreamFromFormat(formatData);
+                if (audioStream != null) {
+                    audioStreams.add(audioStream);
+                }
+            }
+        }
+        
+        // Nếu không tìm thấy định dạng ưu tiên, xử lý tất cả các định dạng
+        if (audioStreams.isEmpty()) {
+            for (int i = 0; i < adaptiveFormats.size(); i++) {
+                final JsonObject formatData = adaptiveFormats.getObject(i);
+                final AudioStream audioStream = getAudioStreamFromFormat(formatData);
+                if (audioStream != null) {
+                    audioStreams.add(audioStream);
+                }
+            }
+        }
+        
+        return audioStreams;
+    }
 }
