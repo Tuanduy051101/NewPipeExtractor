@@ -85,6 +85,9 @@ import org.schabi.newpipe.extractor.utils.LocaleCompat;
 import org.schabi.newpipe.extractor.utils.Pair;
 import org.schabi.newpipe.extractor.utils.Parser;
 import org.schabi.newpipe.extractor.utils.Utils;
+import org.schabi.newpipe.extractor.services.youtube.optimization.EssentialStreamInfo;
+import org.schabi.newpipe.extractor.services.youtube.optimization.AdditionalStreamInfo;
+import org.schabi.newpipe.extractor.services.youtube.optimization.SmartStreamCache;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -98,17 +101,20 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-//import java.util.Timer;
-//import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 public class YoutubeStreamExtractor extends StreamExtractor {
+
+    private static final SmartStreamCache streamCache = new SmartStreamCache();
+    private static final ExecutorService executor = Executors.newFixedThreadPool(3);
 
     private JsonObject playerResponse;
     private JsonObject nextResponse;
@@ -608,14 +614,20 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
     @Override
     public List<AudioStream> getAudioStreams() throws ExtractionException {
-        assertPageFetched();
+        EssentialStreamInfo cachedInfo = streamCache.getEssentialInfo(getId());
+        if (cachedInfo != null) {
+            return cachedInfo.audioStreams;
+        }
         return getItags(ADAPTIVE_FORMATS, ItagItem.ItagType.AUDIO,
                 getAudioStreamBuilderHelper(), "audio");
     }
 
     @Override
     public List<VideoStream> getVideoStreams() throws ExtractionException {
-        assertPageFetched();
+        EssentialStreamInfo cachedInfo = streamCache.getEssentialInfo(getId());
+        if (cachedInfo != null) {
+            return cachedInfo.videoStreams;
+        }
         return getItags(FORMATS, ItagItem.ItagType.VIDEO,
                 getVideoStreamBuilderHelper(false), "video");
     }
@@ -764,87 +776,6 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     private static final String SIGNATURE_CIPHER = "signatureCipher";
     private static final String CIPHER = "cipher";
 
-//    @Override
-//    public void onFetchPage(@Nonnull final Downloader downloader)
-//            throws IOException, ExtractionException, InterruptedException {
-//
-//        final String videoId = getId();
-//        final Localization localization = getExtractorLocalization();
-//        final ContentCountry contentCountry = getExtractorContentCountry();
-//
-//        final JsonObject webPlayerResponse = YoutubeParsingHelper.getWebPlayerResponse(
-//                localization, contentCountry, videoId);
-//
-//        if (isPlayerResponseNotValid(webPlayerResponse, videoId)) {
-//            // Check the playability status, as private and deleted videos and invalid video IDs do
-//            // not return the ID provided in the player response
-//            // When the requested video is playable and a different video ID is returned, it has
-//            // the OK playability status, meaning the ExtractionException after this check will be
-//            // thrown
-//            checkPlayabilityStatus(
-//                    webPlayerResponse, webPlayerResponse.getObject("playabilityStatus"));
-//            throw new ExtractionException("Initial WEB player response is not valid");
-//        }
-//
-//        // Save the webPlayerResponse into playerResponse in the case the video cannot be played,
-//        // so some metadata can be retrieved
-//        playerResponse = webPlayerResponse;
-//
-//        // Use the player response from the player endpoint of the desktop internal API because
-//        // there can be restrictions on videos in the embedded player.
-//        // E.g. if a video is age-restricted, the embedded player's playabilityStatus says that
-//        // the video cannot be played outside of YouTube, but does not show the original message.
-//        final JsonObject playabilityStatus = webPlayerResponse.getObject("playabilityStatus");
-//
-//        final boolean isAgeRestricted = "login_required".equalsIgnoreCase(
-//                playabilityStatus.getString("status"))
-//                && playabilityStatus.getString("reason", "")
-//                .contains("age");
-//
-//        setStreamType();
-//
-//        if (isAgeRestricted) {
-//            fetchTvHtml5EmbedJsonPlayer(contentCountry, localization, videoId);
-//
-//            // If no streams can be fetched in the TVHTML5 simply embed client, the video should be
-//            // age-restricted, therefore throw an AgeRestrictedContentException explicitly.
-//            if (tvHtml5SimplyEmbedStreamingData == null) {
-//                throw new AgeRestrictedContentException(
-//                        "This age-restricted video cannot be watched.");
-//            }
-//
-//            // Refresh the stream type because the stream type may be not properly known for
-//            // age-restricted videos
-//            setStreamType();
-//        } else {
-//            checkPlayabilityStatus(webPlayerResponse, playabilityStatus);
-//
-//            // Fetching successfully the iOS player is mandatory to get streams
-//            fetchIosMobileJsonPlayer(contentCountry, localization, videoId);
-//
-//            try {
-//                fetchAndroidMobileJsonPlayer(contentCountry, localization, videoId);
-//            } catch (final Exception ignored) {
-//                // Ignore exceptions related to ANDROID client fetch or parsing, as it is not
-//                // compulsory to play contents
-//            }
-//        }
-//
-//        // The microformat JSON object of the content is only returned on the WEB client,
-//        // so we need to store it instead of getting it directly from the playerResponse
-//        playerMicroFormatRenderer = webPlayerResponse.getObject("microformat")
-//                .getObject("playerMicroformatRenderer");
-//
-//        final byte[] body = JsonWriter.string(
-//                prepareDesktopJsonBuilder(localization, contentCountry)
-//                        .value(VIDEO_ID, videoId)
-//                        .value(CONTENT_CHECK_OK, true)
-//                        .value(RACY_CHECK_OK, true)
-//                        .done())
-//                .getBytes(StandardCharsets.UTF_8);
-//        nextResponse = getJsonPostResponse(NEXT, body, localization);
-//    }
-
     @Override
     public void onFetchPage(@Nonnull final Downloader downloader)
             throws IOException, ExtractionException, InterruptedException {
@@ -865,32 +796,16 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
         // Load iOS response và next response song song
         CompletableFuture<JsonObject> iosFuture = CompletableFuture.supplyAsync(() -> {
-//            try {
-//                iosCpn = generateContentPlaybackNonce();
-//                final byte[] mobileBody = JsonWriter.string(
-//                                prepareIosMobileJsonBuilder(localization, contentCountry)
-//                                        .value(VIDEO_ID, videoId)
-//                                        .value(CPN, iosCpn)
-//                                        .value(CONTENT_CHECK_OK, true)
-//                                        .value(RACY_CHECK_OK, true)
-//                                        .done())
-//                        .getBytes(StandardCharsets.UTF_8);
-//
-//                return getJsonIosPostResponse(PLAYER, mobileBody, localization,
-//                        "&t=" + generateTParameter() + "&id=" + videoId);
-//            } catch (Exception e) {
-//                throw new CompletionException(e);
-//            }
             while (true) {
                 try {
                     iosCpn = generateContentPlaybackNonce();
                     final byte[] mobileBody = JsonWriter.string(
                                     prepareIosMobileJsonBuilder(localization, contentCountry)
-                                            .value(VIDEO_ID, videoId)
-                                            .value(CPN, iosCpn)
-                                            .value(CONTENT_CHECK_OK, true)
-                                            .value(RACY_CHECK_OK, true)
-                                            .done())
+                                    .value(VIDEO_ID, videoId)
+                            .value(CPN, iosCpn)
+                            .value(CONTENT_CHECK_OK, true)
+                            .value(RACY_CHECK_OK, true)
+                            .done())
                             .getBytes(StandardCharsets.UTF_8);
 
                     playerResponse = getJsonIosPostResponse(PLAYER, mobileBody, localization,
@@ -1775,5 +1690,69 @@ public class YoutubeStreamExtractor extends StreamExtractor {
                 .getObject("results")
                 .getObject("results")
                 .getArray("contents"));
+    }
+
+    public CompletableFuture<EssentialStreamInfo> getEssentialInfo() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                // Check cache first
+                EssentialStreamInfo cachedInfo = streamCache.getEssentialInfo(getId());
+                if (cachedInfo != null) {
+                    return cachedInfo;
+                }
+
+                // Extract essential info
+                EssentialStreamInfo info = extractEssentialInfo();
+                streamCache.cacheEssentialInfo(getId(), info);
+                return info;
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+        }, executor);
+    }
+
+    public CompletableFuture<AdditionalStreamInfo> getAdditionalInfo() {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                // Check cache first
+                AdditionalStreamInfo cachedInfo = streamCache.getAdditionalInfo(getId());
+                if (cachedInfo != null) {
+                    return cachedInfo;
+                }
+
+                // Extract additional info
+                AdditionalStreamInfo info = extractAdditionalInfo();
+                streamCache.cacheAdditionalInfo(getId(), info);
+                return info;
+            } catch (Exception e) {
+                throw new CompletionException(e);
+            }
+        }, executor);
+    }
+
+    private EssentialStreamInfo extractEssentialInfo() throws ExtractionException {
+        assertPageFetched();
+        return new EssentialStreamInfo(
+            getId(),
+            getVideoStreams(),
+            getAudioStreams(),
+            getName(),
+            getThumbnails()
+        );
+    }
+
+    private AdditionalStreamInfo extractAdditionalInfo() throws ExtractionException {
+        assertPageFetched();
+        return new AdditionalStreamInfo(
+            getDescription().getContent(),
+            getViewCount(),
+            getUploaderName(),
+            getUploaderUrl(),
+            getUploaderAvatars(),
+            getRelatedItems().getItems(),
+            getLikeCount(),
+            getStreamType() == StreamType.LIVE_STREAM,
+            getTextualUploadDate()
+        );
     }
 }
