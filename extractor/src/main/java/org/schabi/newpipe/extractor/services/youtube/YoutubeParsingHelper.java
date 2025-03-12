@@ -1071,7 +1071,7 @@ public final class YoutubeParsingHelper {
         final var headers = getYouTubeHeaders();
         
         // Thêm User-Agent vào headers
-        headers.put("User-Agent", List.of(userAgent));
+//        headers.put("User-Agent", List.of(userAgent));
         
         return JsonUtils.toJsonObject(getValidJsonResponseBody(
                 getDownloader().postWithContentTypeJson(YOUTUBEI_V1_URL + endpoint + "?"
