@@ -78,6 +78,7 @@ public class StreamInfo extends Info {
         final StreamInfo streamInfo;
         try {
             streamInfo = extractImportantData(extractor);
+            streamInfo.streamExtractor = extractor;
             extractStreams(streamInfo, extractor);
             extractOptionalData(streamInfo, extractor);
             return streamInfo;
@@ -386,6 +387,9 @@ public class StreamInfo extends Info {
      * Preview frames, e.g. for the storyboard / seekbar thumbnail preview
      */
     private List<Frameset> previewFrames = List.of();
+
+    // Store the extractor for later use
+    private StreamExtractor streamExtractor;
 
     /**
      * Get the stream type
@@ -726,5 +730,14 @@ public class StreamInfo extends Info {
 
     public void setShortFormContent(final boolean isShortFormContent) {
         this.shortFormContent = isShortFormContent;
+    }
+
+    /**
+     * Get the stream extractor used to create this StreamInfo
+     * 
+     * @return the stream extractor
+     */
+    public StreamExtractor getStreamExtractor() {
+        return streamExtractor;
     }
 }

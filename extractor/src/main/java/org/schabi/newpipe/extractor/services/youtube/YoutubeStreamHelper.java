@@ -6,12 +6,15 @@ import com.grack.nanojson.JsonWriter;
 import org.schabi.newpipe.extractor.exceptions.ExtractionException;
 import org.schabi.newpipe.extractor.localization.ContentCountry;
 import org.schabi.newpipe.extractor.localization.Localization;
+import org.schabi.newpipe.extractor.stream.AudioStream;
+import org.schabi.newpipe.extractor.stream.VideoStream;
 import org.schabi.newpipe.extractor.utils.JsonUtils;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -340,5 +343,92 @@ public final class YoutubeStreamHelper {
             @Nonnull final String userAgent) {
         return Map.of("User-Agent", List.of(userAgent),
                 "X-Goog-Api-Format-Version", List.of("2"));
+    }
+
+    /**
+     * Get audio streams from streaming data of different clients.
+     *
+     * @param html5StreamingData           streaming data from HTML5 client
+     * @param androidStreamingData         streaming data from Android client
+     * @param iosStreamingData             streaming data from iOS client
+     * @param html5Cpn                     content playback nonce for HTML5 client
+     * @param androidCpn                   content playback nonce for Android client
+     * @param iosCpn                       content playback nonce for iOS client
+     * @param html5StreamingUrlsPoToken    poToken for HTML5 client streaming URLs
+     * @param androidStreamingUrlsPoToken  poToken for Android client streaming URLs
+     * @param iosStreamingUrlsPoToken      poToken for iOS client streaming URLs
+     * @return a list of audio streams
+     */
+    @Nonnull
+    public static List<AudioStream> getAudioStreams(
+            @Nullable final JsonObject html5StreamingData,
+            @Nullable final JsonObject androidStreamingData,
+            @Nullable final JsonObject iosStreamingData,
+            @Nullable final String html5Cpn,
+            @Nullable final String androidCpn,
+            @Nullable final String iosCpn,
+            @Nullable final String html5StreamingUrlsPoToken,
+            @Nullable final String androidStreamingUrlsPoToken,
+            @Nullable final String iosStreamingUrlsPoToken) {
+        // Implementation will be added later
+        return new ArrayList<>();
+    }
+
+    /**
+     * Get video streams from streaming data of different clients.
+     *
+     * @param html5StreamingData           streaming data from HTML5 client
+     * @param androidStreamingData         streaming data from Android client
+     * @param iosStreamingData             streaming data from iOS client
+     * @param html5Cpn                     content playback nonce for HTML5 client
+     * @param androidCpn                   content playback nonce for Android client
+     * @param iosCpn                       content playback nonce for iOS client
+     * @param html5StreamingUrlsPoToken    poToken for HTML5 client streaming URLs
+     * @param androidStreamingUrlsPoToken  poToken for Android client streaming URLs
+     * @param iosStreamingUrlsPoToken      poToken for iOS client streaming URLs
+     * @return a list of video streams
+     */
+    @Nonnull
+    public static List<VideoStream> getVideoStreams(
+            @Nullable final JsonObject html5StreamingData,
+            @Nullable final JsonObject androidStreamingData,
+            @Nullable final JsonObject iosStreamingData,
+            @Nullable final String html5Cpn,
+            @Nullable final String androidCpn,
+            @Nullable final String iosCpn,
+            @Nullable final String html5StreamingUrlsPoToken,
+            @Nullable final String androidStreamingUrlsPoToken,
+            @Nullable final String iosStreamingUrlsPoToken) {
+        // Implementation will be added later
+        return new ArrayList<>();
+    }
+
+    /**
+     * Get video-only streams from streaming data of different clients.
+     *
+     * @param html5StreamingData           streaming data from HTML5 client
+     * @param androidStreamingData         streaming data from Android client
+     * @param iosStreamingData             streaming data from iOS client
+     * @param html5Cpn                     content playback nonce for HTML5 client
+     * @param androidCpn                   content playback nonce for Android client
+     * @param iosCpn                       content playback nonce for iOS client
+     * @param html5StreamingUrlsPoToken    poToken for HTML5 client streaming URLs
+     * @param androidStreamingUrlsPoToken  poToken for Android client streaming URLs
+     * @param iosStreamingUrlsPoToken      poToken for iOS client streaming URLs
+     * @return a list of video-only streams
+     */
+    @Nonnull
+    public static List<VideoStream> getVideoOnlyStreams(
+            @Nullable final JsonObject html5StreamingData,
+            @Nullable final JsonObject androidStreamingData,
+            @Nullable final JsonObject iosStreamingData,
+            @Nullable final String html5Cpn,
+            @Nullable final String androidCpn,
+            @Nullable final String iosCpn,
+            @Nullable final String html5StreamingUrlsPoToken,
+            @Nullable final String androidStreamingUrlsPoToken,
+            @Nullable final String iosStreamingUrlsPoToken) {
+        // Implementation will be added later
+        return new ArrayList<>();
     }
 }

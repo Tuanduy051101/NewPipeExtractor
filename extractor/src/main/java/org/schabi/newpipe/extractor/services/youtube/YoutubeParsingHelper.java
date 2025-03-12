@@ -1057,7 +1057,22 @@ public final class YoutubeParsingHelper {
                                                  final Localization localization)
             throws IOException, ExtractionException {
         final var headers = getYouTubeHeaders();
+        
+        return JsonUtils.toJsonObject(getValidJsonResponseBody(
+                getDownloader().postWithContentTypeJson(YOUTUBEI_V1_URL + endpoint + "?"
+                        + DISABLE_PRETTY_PRINT_PARAMETER, headers, body, localization)));
+    }
 
+    public static JsonObject getJsonPostResponse(final String endpoint,
+                                             final byte[] body,
+                                             final Localization localization,
+                                             final String userAgent)
+            throws IOException, ExtractionException {
+        final var headers = getYouTubeHeaders();
+        
+        // Thêm User-Agent vào headers
+        headers.put("User-Agent", List.of(userAgent));
+        
         return JsonUtils.toJsonObject(getValidJsonResponseBody(
                 getDownloader().postWithContentTypeJson(YOUTUBEI_V1_URL + endpoint + "?"
                         + DISABLE_PRETTY_PRINT_PARAMETER, headers, body, localization)));
@@ -1266,10 +1281,10 @@ public final class YoutubeParsingHelper {
                         // Possible error messages:
                         // "This account has been terminated for a violation of YouTube's Terms of
                         //     Service."
-                        // "This account has been terminated due to multiple or severe violations of
-                        //     YouTube's policy prohibiting hate speech."
-                        // "This account has been terminated due to multiple or severe violations of
-                        //     YouTube's policy prohibiting content designed to harass, bully or
+                        // "This account has been terminated due to multiple or severe violations
+                        //     of YouTube's policy prohibiting hate speech."
+                        // "This account has been terminated due to multiple or severe violations
+                        //     of YouTube's policy prohibiting content designed to harass, bully or
                         //     threaten."
                         // "This account has been terminated due to multiple or severe violations
                         //     of YouTube's policy against spam, deceptive practices and misleading

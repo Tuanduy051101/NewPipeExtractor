@@ -156,7 +156,360 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nullable
     private String iosStreamingUrlsPoToken;
 
+    // Flag to track if we're in fast loading mode
+    private boolean fastLoadingMode = false;
+    
+    // Flag to track if we've loaded the essential data
+    private boolean essentialDataLoaded = false;
+    
+    // Flag to track if we've loaded the full data
+    private boolean fullDataLoaded = false;
+    
+    // Store the essential data separately
+    @Nullable
+    private JsonObject essentialPlayerResponse;
+    
+    /**
+     * Enable fast loading mode which only loads essential data needed for playback
+     * @param enable true to enable fast loading, false to load everything
+     */
+    public void setFastLoadingMode(boolean enable) {
+        this.fastLoadingMode = enable;
+    }
+    
+    /**
+     * Check if fast loading mode is enabled
+     * @return true if fast loading is enabled
+     */
+    public boolean isFastLoadingMode() {
+        return fastLoadingMode;
+    }
+    
+    /**
+     * Fetch only the essential data needed for video playback
+     * This includes video metadata and streaming URLs
+     */
+    public void fetchEssentialData() throws ExtractionException, IOException {
+        if (essentialDataLoaded) {
+            return;
+        }
+        
+        final Downloader downloader = getDownloader();
+        final Localization localization = getExtractorLocalization();
+        final ContentCountry contentCountry = getExtractorContentCountry();
+        
+        // Generate content playback nonces for each client
+        iosCpn = generateContentPlaybackNonce();
+        androidCpn = generateContentPlaybackNonce();
+        html5Cpn = generateContentPlaybackNonce();
+        
+        // Fetch only player response which contains essential streaming data
+        final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(localization, contentCountry)
+                .value(VIDEO_ID, getId())
+                .value(CPN, html5Cpn)
+                .value(CONTENT_CHECK_OK, true)
+                .value(RACY_CHECK_OK, true)
+                .done())
+                .getBytes(StandardCharsets.UTF_8);
+        
+        essentialPlayerResponse = getJsonPostResponse("player", body, localization);
+        
+        // Check for errors
+        if (essentialPlayerResponse != null) {
+            YoutubeParsingHelper.defaultAlertsCheck(essentialPlayerResponse);
+        }
+        
+        essentialDataLoaded = true;
+    }
+    
+    /**
+     * Complete the data loading by fetching all remaining information
+     */
+    public void fetchFullData() throws ExtractionException, IOException {
+        if (fullDataLoaded) {
+            return;
+        }
+        
+        // If we haven't loaded essential data yet, load everything at once
+        if (!essentialDataLoaded) {
+            fetchPage();
+            return;
+        }
+        
+        // Otherwise, fetch the remaining data
+        final Downloader downloader = getDownloader();
+        final Localization localization = getExtractorLocalization();
+        final ContentCountry contentCountry = getExtractorContentCountry();
+        
+        // Copy essential data to main player response
+        playerResponse = essentialPlayerResponse;
+        
+        // Fetch next response which contains related videos, comments, etc.
+        final byte[] body = JsonWriter.string(YoutubeParsingHelper.prepareDesktopJsonBuilder(localization, contentCountry)
+                .value(VIDEO_ID, getId())
+                .done())
+                .getBytes(StandardCharsets.UTF_8);
+        
+        nextResponse = getJsonPostResponse("next", body, localization);
+        
+        // Extract additional information from the next response
+        extractVideoSecondaryInfo();
+        
+        fullDataLoaded = true;
+    }
+    
+    @Override
+    public void fetchPage() throws IOException, ExtractionException {
+        if (fastLoadingMode && !fullDataLoaded) {
+            // In fast loading mode, only fetch essential data
+            fetchEssentialData();
+        } else {
+            // Fetch everything as normal
+            super.fetchPage();
+            fullDataLoaded = true;
+            essentialDataLoaded = true;
+        }
+    }
+    
+    // Override the original fetchPage implementation
+    @Override
+    public void onFetchPage(@Nonnull final Downloader downloader)
+            throws IOException, ExtractionException {
+        final String videoId = getId();
+        final Localization localization = getExtractorLocalization();
+        final ContentCountry contentCountry = getExtractorContentCountry();
 
+        // Generate content playback nonces for each client
+        iosCpn = generateContentPlaybackNonce();
+        androidCpn = generateContentPlaybackNonce();
+        html5Cpn = generateContentPlaybackNonce();
+
+        final PoTokenProvider poTokenproviderInstance = poTokenProvider;
+        final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
+
+        // Create thread pool for parallel execution
+        final ExecutorService executor = new ThreadPoolExecutor(
+                4, 8,
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(100));
+
+        try {
+            // First, fetch the HTML5 player data which is essential for playback
+            final CompletableFuture<Void> html5Future = CompletableFuture.runAsync(() -> {
+                try {
+                    final byte[] body = JsonWriter.string(prepareDesktopJsonBuilder(localization, contentCountry)
+                            .value(VIDEO_ID, videoId)
+                            .value(CPN, html5Cpn)
+                            .value(CONTENT_CHECK_OK, true)
+                            .value(RACY_CHECK_OK, true)
+                            .done())
+                            .getBytes(StandardCharsets.UTF_8);
+
+                    playerResponse = getJsonPostResponse("player", body, localization);
+                    YoutubeParsingHelper.defaultAlertsCheck(playerResponse);
+
+                    // Extract streaming data
+                    html5StreamingData = playerResponse.getObject("streamingData");
+                    
+                    // Set stream type
+                    setStreamType();
+                    
+                    // Extract player microformat renderer
+                    if (playerResponse.has("microformat")) {
+                        playerMicroFormatRenderer = playerResponse.getObject("microformat")
+                                .getObject("playerMicroformatRenderer");
+                    }
+                    
+                    // Extract captions
+                    if (playerResponse.has(CAPTIONS)) {
+                        final JsonObject captions = playerResponse.getObject(CAPTIONS);
+                        if (captions.has("playerCaptionsTracklistRenderer")) {
+                            playerCaptionsTracklistRenderer = captions.getObject("playerCaptionsTracklistRenderer");
+                        }
+                    }
+                } catch (Exception e) {
+                    throw new CompletionException("HTML5 client failed", e);
+                }
+            }, executor);
+
+            // Wait for HTML5 client to complete as it's essential
+            try {
+                html5Future.get(10, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                throw new ExtractionException("Failed to load essential video data", e);
+            }
+
+            // If we're in fast loading mode, we're done with the essential data
+            if (fastLoadingMode) {
+                essentialDataLoaded = true;
+                return;
+            }
+
+            // Now fetch additional data in parallel
+            CompletableFuture.allOf(
+                    // Android client
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            if (!noPoTokenProviderSet) {
+                                final PoTokenResult androidPoTokenResult = 
+                                        poTokenproviderInstance.getAndroidClientPoToken(videoId);
+                                assert androidPoTokenResult != null;
+                                androidStreamingUrlsPoToken = androidPoTokenResult.streamingDataPoToken;
+                                
+                                final byte[] body = JsonWriter.string(YoutubeParsingHelper
+                                        .prepareDesktopJsonBuilder(localization, contentCountry)
+                                        .value(VIDEO_ID, videoId)
+                                        .value(CPN, androidCpn)
+                                        .value(CONTENT_CHECK_OK, true)
+                                        .value(RACY_CHECK_OK, true)
+                                        .done())
+                                        .getBytes(StandardCharsets.UTF_8);
+
+                                final JsonObject androidPlayerResponse = getJsonPostResponse(
+                                        "player", body, localization,
+                                        YoutubeParsingHelper.getAndroidUserAgent(localization));
+
+                                if (androidPlayerResponse != null && androidPlayerResponse.has("streamingData")) {
+                                    androidStreamingData = androidPlayerResponse.getObject("streamingData");
+                                }
+                            }
+                        } catch (Exception e) {
+                            LOG.debug("Android client failed", e);
+                        }
+                    }, executor),
+
+                    // iOS client (only if enabled)
+                    fetchIosClient ? CompletableFuture.runAsync(() -> {
+                        try {
+                            if (!noPoTokenProviderSet) {
+                                final PoTokenResult iosPoTokenResult = 
+                                        poTokenproviderInstance.getIosClientPoToken(videoId);
+                                iosStreamingUrlsPoToken = iosPoTokenResult.streamingDataPoToken;
+                                
+                                final byte[] body = JsonWriter.string(YoutubeParsingHelper
+                                        .prepareDesktopJsonBuilder(localization, contentCountry)
+                                        .value(VIDEO_ID, videoId)
+                                        .value(CPN, iosCpn)
+                                        .value(CONTENT_CHECK_OK, true)
+                                        .value(RACY_CHECK_OK, true)
+                                        .done())
+                                        .getBytes(StandardCharsets.UTF_8);
+
+                                final JsonObject iosPlayerResponse = getJsonPostResponse(
+                                        "player", body, localization,
+                                        YoutubeParsingHelper.getIosUserAgent(localization));
+
+                                if (iosPlayerResponse != null && iosPlayerResponse.has("streamingData")) {
+                                    iosStreamingData = iosPlayerResponse.getObject("streamingData");
+                                }
+                            }
+                        } catch (Exception e) {
+                            LOG.debug("iOS client failed", e);
+                        }
+                    }, executor) : CompletableFuture.completedFuture(null),
+
+                    // Next response (related videos, comments, etc.)
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            final byte[] body = JsonWriter.string(
+                                    prepareDesktopJsonBuilder(localization, contentCountry)
+                                            .value(VIDEO_ID, videoId)
+                                            .done())
+                                    .getBytes(StandardCharsets.UTF_8);
+                            nextResponse = getJsonPostResponse("next", body, localization);
+                            
+                            // Extract video info renderers
+                            if (nextResponse != null && nextResponse.has("contents")) {
+                                extractVideoInfoRenderers();
+                            }
+                        } catch (Exception e) {
+                            LOG.debug("Next response fetch failed", e);
+                        }
+                    }, executor)
+            ).get(15, TimeUnit.SECONDS); // Longer timeout for non-essential data
+
+        } catch (ExecutionException | InterruptedException | TimeoutException e) {
+            if (html5StreamingData == null) {
+                throw new ExtractionException("Failed to load video data", e);
+            }
+            LOG.debug("Some non-critical tasks failed", e);
+        } finally {
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            
+            // Mark data as loaded
+            essentialDataLoaded = true;
+            fullDataLoaded = true;
+        }
+    }
+
+    // Helper method to extract video info renderers from next response
+    private void extractVideoInfoRenderers() {
+        try {
+            final JsonArray contents = nextResponse.getObject("contents")
+                    .getObject("twoColumnWatchNextResults")
+                    .getObject("results")
+                    .getObject("results")
+                    .getArray("contents");
+            
+            for (final Object content : contents) {
+                if (!(content instanceof JsonObject)) continue;
+                
+                final JsonObject obj = (JsonObject) content;
+                if (obj.has("videoPrimaryInfoRenderer")) {
+                    videoPrimaryInfoRenderer = obj.getObject("videoPrimaryInfoRenderer");
+                } else if (obj.has("videoSecondaryInfoRenderer")) {
+                    videoSecondaryInfoRenderer = obj.getObject("videoSecondaryInfoRenderer");
+                }
+            }
+        } catch (Exception e) {
+            LOG.debug("Failed to extract video info renderers", e);
+        }
+    }
+
+    // Helper method to ensure essential data is loaded
+    private void assertEssentialDataLoaded() throws ExtractionException {
+        if (!essentialDataLoaded) {
+            try {
+                fetchEssentialData();
+            } catch (IOException e) {
+                throw new ExtractionException("Could not load essential data", e);
+            }
+        }
+    }
+    
+    // Helper method to extract video secondary info from next response
+    private void extractVideoSecondaryInfo() {
+        if (nextResponse != null) {
+            try {
+                final JsonArray contents = nextResponse.getObject("contents")
+                        .getObject("twoColumnWatchNextResults")
+                        .getObject("results")
+                        .getObject("results")
+                        .getArray("contents");
+                
+                for (final Object content : contents) {
+                    if (!(content instanceof JsonObject)) continue;
+                    
+                    final JsonObject obj = (JsonObject) content;
+                    if (obj.has("videoSecondaryInfoRenderer")) {
+                        videoSecondaryInfoRenderer = obj.getObject("videoSecondaryInfoRenderer");
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                // Just log the error but don't fail
+                LOG.warn("Failed to extract video secondary info", e);
+            }
+        }
+    }
 
     public YoutubeStreamExtractor(final StreamingService service, final LinkHandler linkHandler) {
         super(service, linkHandler);
@@ -169,20 +522,25 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nonnull
     @Override
     public String getName() throws ParsingException {
-        assertPageFetched();
+        try {
+            assertEssentialDataLoaded();
+        } catch (ExtractionException e) {
+            throw new ParsingException("Could not get name", e);
+        }
+        
         String title;
-
+        
         // Try to get the video's original title, which is untranslated
         title = playerResponse.getObject("videoDetails").getString("title");
-
+        
         if (isNullOrEmpty(title)) {
             title = getTextFromObject(getVideoPrimaryInfoRenderer().getObject("title"));
-
+            
             if (isNullOrEmpty(title)) {
                 throw new ParsingException("Could not get name");
             }
         }
-
+        
         return title;
     }
 
@@ -532,8 +890,17 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nonnull
     @Override
     public String getUploaderUrl() throws ParsingException {
-        assertPageFetched();
-
+        // This is secondary information, so we need to ensure full data is loaded
+        if (fastLoadingMode && !fullDataLoaded) {
+            try {
+                fetchFullData();
+            } catch (Exception e) {
+                throw new ParsingException("Could not get uploader URL", e);
+            }
+        } else {
+            assertPageFetched();
+        }
+        
         // Don't use the id in the videoSecondaryRenderer object to get real id of the uploader
         // The difference between the real id of the channel and the displayed id is especially
         // visible for music channels and autogenerated channels.
@@ -548,8 +915,12 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nonnull
     @Override
     public String getUploaderName() throws ParsingException {
-        assertPageFetched();
-
+        try {
+            assertEssentialDataLoaded();
+        } catch (ExtractionException e) {
+            throw new ParsingException("Could not get uploader name", e);
+        }
+        
         // Don't use the name in the videoSecondaryRenderer object to get real name of the uploader
         // The difference between the real name of the channel and the displayed name is especially
         // visible for music channels and autogenerated channels.
@@ -667,36 +1038,67 @@ public class YoutubeStreamExtractor extends StreamExtractor {
 
     @Override
     public List<AudioStream> getAudioStreams() throws ExtractionException {
-        assertPageFetched();
-        return getItags(ADAPTIVE_FORMATS, ItagItem.ItagType.AUDIO,
-                getAudioStreamBuilderHelper(), "audio");
+        try {
+            assertEssentialDataLoaded();
+        } catch (ExtractionException e) {
+            throw new ExtractionException("Could not get audio streams", e);
+        }
+        
+        return YoutubeStreamHelper.getAudioStreams(
+                html5StreamingData, androidStreamingData, iosStreamingData,
+                html5Cpn, androidCpn, iosCpn,
+                html5StreamingUrlsPoToken, androidStreamingUrlsPoToken, iosStreamingUrlsPoToken);
     }
 
     @Override
     public List<VideoStream> getVideoStreams() throws ExtractionException {
-        assertPageFetched();
-        return getItags(FORMATS, ItagItem.ItagType.VIDEO,
-                getVideoStreamBuilderHelper(false), "video");
+        try {
+            assertEssentialDataLoaded();
+        } catch (ExtractionException e) {
+            throw new ExtractionException("Could not get video streams", e);
+        }
+        
+        return YoutubeStreamHelper.getVideoStreams(
+                html5StreamingData, androidStreamingData, iosStreamingData,
+                html5Cpn, androidCpn, iosCpn,
+                html5StreamingUrlsPoToken, androidStreamingUrlsPoToken, iosStreamingUrlsPoToken);
     }
 
     @Override
     public List<VideoStream> getVideoOnlyStreams() throws ExtractionException {
-        assertPageFetched();
-        return getItags(ADAPTIVE_FORMATS, ItagItem.ItagType.VIDEO_ONLY,
-                getVideoStreamBuilderHelper(true), "video-only");
+        try {
+            assertEssentialDataLoaded();
+        } catch (ExtractionException e) {
+            throw new ExtractionException("Could not get video only streams", e);
+        }
+        
+        return YoutubeStreamHelper.getVideoOnlyStreams(
+                html5StreamingData, androidStreamingData, iosStreamingData,
+                html5Cpn, androidCpn, iosCpn,
+                html5StreamingUrlsPoToken, androidStreamingUrlsPoToken, iosStreamingUrlsPoToken);
     }
 
     @Override
     @Nonnull
-    public List<SubtitlesStream> getSubtitlesDefault() throws ParsingException {
+    public List<SubtitlesStream> getSubtitlesDefault() throws ExtractionException {
+        try {
+            assertEssentialDataLoaded();
+        } catch (ExtractionException e) {
+            throw new ExtractionException("Could not get default subtitles", e);
+        }
+        
         return getSubtitles(MediaFormat.TTML);
     }
 
     @Override
     @Nonnull
-    public List<SubtitlesStream> getSubtitles(final MediaFormat format) throws ParsingException {
-        assertPageFetched();
-
+    public List<SubtitlesStream> getSubtitles(final MediaFormat format) throws ExtractionException {
+        try {
+            assertEssentialDataLoaded();
+        } catch (ExtractionException e) {
+            throw new ExtractionException("Could not get subtitles", e);
+        }
+        
         // We cannot store the subtitles list because the media format may change
         final List<SubtitlesStream> subtitlesToReturn = new ArrayList<>();
         final JsonArray captionsArray = playerCaptionsTracklistRenderer.getArray("captionTracks");
@@ -748,7 +1150,16 @@ public class YoutubeStreamExtractor extends StreamExtractor {
     @Nullable
     @Override
     public MultiInfoItemsCollector getRelatedItems() throws ExtractionException {
-        assertPageFetched();
+        // This is secondary information, so we need to ensure full data is loaded
+        if (fastLoadingMode && !fullDataLoaded) {
+            try {
+                fetchFullData();
+            } catch (Exception e) {
+                throw new ExtractionException("Could not get related items", e);
+            }
+        } else {
+            assertPageFetched();
+        }
 
         if (getAgeLimit() != NO_AGE_LIMIT) {
             return null;
@@ -825,329 +1236,6 @@ public class YoutubeStreamExtractor extends StreamExtractor {
             = "playerCaptionsTracklistRenderer";
     private static final String CAPTIONS = "captions";
     private static final String PLAYABILITY_STATUS = "playabilityStatus";
-
-    // ttd-edit-v1
-//    @Override
-//    public void onFetchPage(@Nonnull final Downloader downloader)
-//            throws IOException, ExtractionException {
-//
-//        // 1. Tạo ExecutorService để quản lý threads
-//        final ExecutorService executor = Executors.newFixedThreadPool(4);
-//
-//        try {
-//            // 2. Fetch thông tin cơ bản song song
-//            final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
-//                try {
-//                    return getId();
-//                } catch (final ParsingException e) {
-//                    LOG.error("Failed to get video ID", e);
-//                    throw new CompletionException(e);
-//                }
-//            }, executor);
-//
-//            final CompletableFuture<Localization> localizationFuture =
-//                    CompletableFuture.supplyAsync(this::getExtractorLocalization, executor);
-//
-//            final CompletableFuture<ContentCountry> contentCountryFuture =
-//                    CompletableFuture.supplyAsync(this::getExtractorContentCountry, executor);
-//
-//            // 3. Chờ thông tin cơ bản với timeout
-//            final String videoId = videoIdFuture.get(3, TimeUnit.SECONDS);
-//            final Localization localization = localizationFuture.get(3, TimeUnit.SECONDS);
-//            final ContentCountry contentCountry = contentCountryFuture.get(3, TimeUnit.SECONDS);
-//
-//            final PoTokenProvider poTokenproviderInstance = poTokenProvider;
-//            final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
-//
-//            // 4. Fetch PoTokens song song (nếu cần)
-//            final CompletableFuture<PoTokenResult> androidTokenFuture = !noPoTokenProviderSet
-//                    ? CompletableFuture.supplyAsync(
-//                    () -> poTokenproviderInstance.getAndroidClientPoToken(videoId), executor)
-//                    : CompletableFuture.completedFuture(null);
-//
-//            final CompletableFuture<PoTokenResult> iosTokenFuture = (!noPoTokenProviderSet && fetchIosClient)
-//                    ? CompletableFuture.supplyAsync(
-//                    () -> poTokenproviderInstance.getIosClientPoToken(videoId), executor)
-//                    : CompletableFuture.completedFuture(null);
-//
-//            // 5. Fetch các clients song song
-//            final CompletableFuture<Void> html5Future = CompletableFuture.runAsync(() -> {
-//                try {
-//                    fetchHtml5Client(localization, contentCountry, videoId,
-//                            poTokenproviderInstance, noPoTokenProviderSet);
-//                    setStreamType(); // Set ngay sau khi có HTML5 data
-//                } catch (Exception e) {
-//                    LOG.error("HTML5 client failed", e);
-//                    throw new CompletionException(e);
-//                }
-//            }, executor);
-//
-//            final CompletableFuture<Void> androidFuture = CompletableFuture.runAsync(() -> {
-//                try {
-//                    final PoTokenResult androidPoTokenResult = androidTokenFuture.get(3, TimeUnit.SECONDS);
-//                    fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
-//                } catch (Exception e) {
-//                    LOG.debug("Android client failed", e);
-//                }
-//            }, executor);
-//
-//            final CompletableFuture<Void> iosFuture = fetchIosClient
-//                    ? CompletableFuture.runAsync(() -> {
-//                try {
-//                    final PoTokenResult iosPoTokenResult = iosTokenFuture.get(3, TimeUnit.SECONDS);
-//                    fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
-//                } catch (Exception e) {
-//                    LOG.debug("iOS client failed", e);
-//                }
-//            }, executor)
-//                    : CompletableFuture.completedFuture(null);
-//
-//            // 6. Fetch next response song song
-//            final CompletableFuture<Void> nextResponseFuture = CompletableFuture.runAsync(() -> {
-//                try {
-//                    final byte[] nextBody = JsonWriter.string(
-//                                    prepareDesktopJsonBuilder(localization, contentCountry)
-//                                            .value(VIDEO_ID, videoId)
-//                                            .value(CONTENT_CHECK_OK, true)
-//                                            .value(RACY_CHECK_OK, true)
-//                                            .done())
-//                            .getBytes(StandardCharsets.UTF_8);
-//                    nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
-//                } catch (Exception e) {
-//                    LOG.error("Next response fetch failed", e);
-//                    throw new CompletionException(e);
-//                }
-//            }, executor);
-//
-//            // 7. Chờ các tasks quan trọng hoàn thành với timeout
-//            try {
-//                CompletableFuture.allOf(
-//                        html5Future,      // Bắt buộc
-//                        nextResponseFuture // Bắt buộc
-//                ).get(10, TimeUnit.SECONDS);
-//            } catch (Exception e) {
-//                throw new ExtractionException("Critical tasks failed", e);
-//            }
-//
-//            // 8. Chờ các tasks không quan trọng (với timeout ngắn hơn)
-//            try {
-//                CompletableFuture.allOf(
-//                        androidFuture,
-//                        iosFuture
-//                ).get(5, TimeUnit.SECONDS);
-//            } catch (Exception e) {
-//                LOG.debug("Some non-critical tasks failed or timed out", e);
-//            }
-//
-//        } catch (ExecutionException | InterruptedException | TimeoutException e) {
-//            throw new RuntimeException(e);
-//        } finally {
-//            // 9. Cleanup resources
-//            executor.shutdown();
-//            try {
-//                if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-//                    executor.shutdownNow();
-//                }
-//            } catch (InterruptedException e) {
-//                executor.shutdownNow();
-//                Thread.currentThread().interrupt();
-//            }
-//        }
-//    }
-
-    @Override
-    public void onFetchPage(@Nonnull final Downloader downloader)
-            throws IOException, ExtractionException {
-
-        // 1. Tạo ExecutorService với LinkedBlockingQueue
-        final ExecutorService executor = new ThreadPoolExecutor(
-                4, 8,
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(100)); // Thay thế PriorityBlockingQueue
-
-        try {
-            // 2. Fetch thông tin cơ bản song song với priority cao
-            final CompletableFuture<String> videoIdFuture = CompletableFuture.supplyAsync(() -> {
-                Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
-                try {
-                    return getId();
-                } catch (final ParsingException e) {
-                    LOG.error("Failed to get video ID", e);
-                    throw new CompletionException(e);
-                }
-            }, executor);
-
-            final CompletableFuture<Localization> localizationFuture =
-                    CompletableFuture.supplyAsync(this::getExtractorLocalization, executor);
-
-            final CompletableFuture<ContentCountry> contentCountryFuture =
-                    CompletableFuture.supplyAsync(this::getExtractorContentCountry, executor);
-
-            // 3. Chờ thông tin cơ bản với timeout ngắn
-            final String videoId = videoIdFuture.get(2, TimeUnit.SECONDS);
-            final Localization localization = localizationFuture.get(2, TimeUnit.SECONDS);
-            final ContentCountry contentCountry = contentCountryFuture.get(2, TimeUnit.SECONDS);
-
-            final PoTokenProvider poTokenproviderInstance = poTokenProvider;
-            final boolean noPoTokenProviderSet = poTokenproviderInstance == null;
-
-            // 4. Fetch HTML5 client trước tiên với priority cao nhất
-            final CompletableFuture<Void> html5Future = CompletableFuture.runAsync(() -> {
-                Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
-                int retryCount = 0;
-                int maxRetries = 3;  // HTML5 client quan trọng nhất nên số lần retry ít hơn
-
-                while (retryCount < maxRetries) {
-                    try {
-                        fetchHtml5Client(localization, contentCountry, videoId,
-                                poTokenproviderInstance, noPoTokenProviderSet);
-                        setStreamType();
-                        return; // Thành công thì thoát
-                    } catch (Exception e) {
-                        retryCount++;
-                        LOG.error("HTML5 client failed on attempt: " + retryCount + "/" + maxRetries, e);
-
-//                        if (retryCount >= maxRetries) {
-//                            throw new CompletionException(e);
-//                        }
-
-//                        try {
-//                            Thread.sleep(1000 * retryCount); // Delay tăng dần
-//                        } catch (InterruptedException ie) {
-//                            Thread.currentThread().interrupt();
-//                            throw new CompletionException(ie);
-//                        }
-                    }
-                }
-            }, executor);
-
-            // 5. Chờ HTML5 client hoàn thành trước
-            try {
-                html5Future.get(15, TimeUnit.SECONDS);
-            } catch (Exception e) {
-                throw new ExtractionException("HTML5 client failed - cannot load video", e);
-            }
-
-            // 6. Fetch các thông tin phụ với priority thấp hơn
-            CompletableFuture.allOf(
-                    // Android client
-                    CompletableFuture.runAsync(() -> {
-                        Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
-                        int retryCount = 0;
-                        int maxRetries = 5;
-
-                        while (retryCount < maxRetries) {
-                            try {
-                                if (!noPoTokenProviderSet) {
-                                    final PoTokenResult androidPoTokenResult =
-                                            poTokenproviderInstance.getAndroidClientPoToken(videoId);
-                                    fetchAndroidClient(localization, contentCountry, videoId, androidPoTokenResult);
-                                }
-                                break; // Thành công thì thoát
-                            } catch (Exception e) {
-                                retryCount++;
-                                LOG.debug("Android client failed on attempt: " + retryCount + "/" + maxRetries, e);
-
-//                                if (retryCount < maxRetries) {
-//                                    try {
-//                                        Thread.sleep(1000 * retryCount);
-//                                    } catch (InterruptedException ie) {
-//                                        Thread.currentThread().interrupt();
-//                                        break;
-//                                    }
-//                                }
-                            }
-                        }
-                    }, executor),
-
-                    // iOS client
-                    fetchIosClient ? CompletableFuture.runAsync(() -> {
-                        Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
-                        int retryCount = 0;
-                        int maxRetries = 5;
-
-                        while (retryCount < maxRetries) {
-                            try {
-                                if (!noPoTokenProviderSet) {
-                                    final PoTokenResult iosPoTokenResult =
-                                            poTokenproviderInstance.getIosClientPoToken(videoId);
-                                    fetchIosClient(localization, contentCountry, videoId, iosPoTokenResult);
-                                }
-                                break; // Thành công thì thoát
-                            } catch (Exception e) {
-                                retryCount++;
-                                LOG.debug("iOS client failed on attempt: " + retryCount + "/" + maxRetries, e);
-
-//                                if (retryCount < maxRetries) {
-//                                    try {
-//                                        Thread.sleep(1000 * retryCount);
-//                                    } catch (InterruptedException ie) {
-//                                        Thread.currentThread().interrupt();
-//                                        break;
-//                                    }
-//                                }
-                            }
-                        }
-                    }, executor) : CompletableFuture.completedFuture(null),
-
-                    // Next videos
-                    CompletableFuture.runAsync(() -> {
-                        Thread.currentThread().setPriority(Thread.MIN_PRIORITY);
-                        int retryCount = 0;
-                        int maxRetries = 5;
-
-                        while (retryCount < maxRetries) {
-                            try {
-                                final byte[] nextBody = JsonWriter.string(
-                                                prepareDesktopJsonBuilder(localization, contentCountry)
-                                                        .value(VIDEO_ID, videoId)
-                                                        .value(CONTENT_CHECK_OK, true)
-                                                        .value(RACY_CHECK_OK, true)
-                                                        .done())
-                                        .getBytes(StandardCharsets.UTF_8);
-                                nextResponse = getJsonPostResponse(NEXT, nextBody, localization);
-
-                                // Nếu thành công thì thoát
-                                if (nextResponse != null) {
-                                    LOG.debug("Related videos loaded successfully on attempt: " + (retryCount + 1));
-                                    break;
-                                }
-
-                            } catch (Exception e) {
-                                LOG.debug("Related videos fetch failed on attempt: " + (retryCount + 1), e);
-                                retryCount++;
-
-//                                if (retryCount < maxRetries) {
-//                                    // Chờ một chút trước khi retry
-//                                    try {
-//                                        Thread.sleep(1000 * retryCount); // Tăng delay theo số lần retry
-//                                    } catch (InterruptedException ie) {
-//                                        Thread.currentThread().interrupt();
-//                                        break;
-//                                    }
-//                                }
-                            }
-                        }
-                    }, executor)
-            ).get(15, TimeUnit.SECONDS); // Timeout dài hơn cho các tasks phụ
-
-        } catch (ExecutionException | InterruptedException | TimeoutException e) {
-            if (html5StreamingData == null) { // Chỉ throw nếu chưa có video data
-                throw new ExtractionException("Failed to load video data", e);
-            }
-            LOG.debug("Some non-critical tasks failed", e);
-        } finally {
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
-                    executor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
 
     private static void checkPlayabilityStatus(@Nonnull final JsonObject playabilityStatus)
             throws ParsingException {
